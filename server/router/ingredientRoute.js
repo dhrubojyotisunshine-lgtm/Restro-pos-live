@@ -1,0 +1,20 @@
+const express = require("express");
+const router = express.Router();
+const auth=require("../middleware/authicantejwt")
+const ingredientsController = require("../controllers/ingredientController");
+
+// Create a new ingredient
+router.post("/ingredients", auth,ingredientsController.createIngredient);
+// router.put("/ingredients/:id", ingredientsController.updateIngredient);
+
+// Delete an existing ingredient
+router.delete("/ingredients/:id", ingredientsController.deleteIngredient);
+
+// Get all ingredients
+router.get("/ingredients",auth,ingredientsController.getAllIngredients);
+router.get('/ingredients/:id', ingredientsController.getIngredientById);
+router.put('/ingredients/:id',ingredientsController.updateIngredient);
+// get ingredient list accourding t stock
+
+router.get('/ingredientsdetail',auth,ingredientsController.getIngredientsDetails);
+module.exports = router;

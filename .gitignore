@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# build output
+dist/
+build/
+**/dist/
+**/build/
+
+# electron
+KOT-Printer-Agent/dist/
+KOT-Printer-Agent/node_modules/
+
+# env
+.env
+.env.*
+
+# logs
+*.log
