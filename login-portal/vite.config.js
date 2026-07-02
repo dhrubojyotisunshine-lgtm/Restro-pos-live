@@ -5,4 +5,7 @@ export default defineConfig({
   plugins: [react()],
   assetsInclude: ['**/*.xlsx'], // Add this line
   base: '/login/', // Set base path
+  server: {
+    port: 5176,
+  },
 });

@@ -8,11 +8,12 @@ const ManagePackagePage = () => {
   const APP_URL = import.meta.env.VITE_APP_URL;
   const VITE_IMG_URL = import.meta.env.VITE_IMG_URL;
     const { id } = useParams();
+  const token = localStorage.getItem("token");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 useEffect(() => {
     axios
-      .get(`https://krayon.softwarestesting.co.in/api/getpackage/${id}`)
+      .get(`${API_BASE_URL}/getpackage/${id}`, { headers: { Authorization: token } })
       .then((res) => {
         setData(res.data);
         setLoading(false);

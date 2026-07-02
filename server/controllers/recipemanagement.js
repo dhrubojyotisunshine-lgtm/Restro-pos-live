@@ -211,23 +211,38 @@ const foodNameFetchApi = async (req, res) => {
 // variant name accourding to food
 const foodWithVariant = async (req, res) => {
   const { foodid } = req.query;
-  console.log(foodid);
- 
-  // Corrected SQL query
-  const sql = `
-    SELECT v.variantname, i.ProductName,variantid
-    FROM variant v
-    LEFT JOIN item_foods i ON i.ProductsID = v.menuid
-    WHERE  i.ProductsID = ?
-  `;
- 
+  const userId = req.id;
+
+  if (!foodid) return res.status(200).json({ success: true, data: [] });
+
   try {
-    // Await the dbQuery function result
-    const result = await dbQuery(sql, [foodid]);
- 
-    // Return the result as JSON response
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    // Verify the food item belongs to this company first
+    const [foodCheck] = await db.pool.promise().query(
+      'SELECT ProductsID, ProductName FROM item_foods WHERE ProductsID = ? AND UserIDInserted = ?',
+      [foodid, creatorId]
+    );
+    if (!foodCheck.length) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+
+    // Fetch only variants whose menuid belongs to this company's food
+    const sql = `
+      SELECT v.variantname, v.variantid, ? AS ProductName
+      FROM variant v
+      INNER JOIN item_foods i ON i.ProductsID = v.menuid AND i.UserIDInserted = ?
+      WHERE v.menuid = ?
+    `;
+    const result = await dbQuery(sql, [foodCheck[0].ProductName, creatorId, foodid]);
     return res.status(200).json({ success: true, data: result });
-   
+
   } catch (err) {
     console.error('Error in foodWithVariant:', err);
     return res.status(500).json({ success: false, message: 'An internal error occurred' });
@@ -329,48 +344,54 @@ const createProduction = async (req, res) => {
 // get supplier leddger
 const getPurchaseTransactions = (req, res) => {
   const { startDate, endDate, supplier_id } = req.query;
+  const userId = req.id;
 
-  // Base query
-  let query = `
-    SELECT 
-      p.suplierID, 
-      p.total_price AS credit, 
-      p.paid_amount AS debit, 
-      p.purchasedate AS purchase_date, 
-      p.details AS description,
-      s.amount AS ledger_amount,
-      s.d_c,
-      p.invoiceid
-    
-    FROM purchaseitem p
-    LEFT JOIN supplier_ledger s 
-      ON p.suplierID = s.supplier_id
-    WHERE 1 = 1
-  `;
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-  // Array to hold the query parameters
-  const queryParams = [];
+    let query = `
+      SELECT
+        p.suplierID,
+        p.total_price AS credit,
+        p.paid_amount AS debit,
+        p.purchasedate AS purchase_date,
+        p.details AS description,
+        s.amount AS ledger_amount,
+        s.d_c,
+        p.invoiceid
 
-  // Conditionally add supplier_id filter if provided
-  if (supplier_id) {
-    query += " AND p.suplierID = ?";
-    queryParams.push(supplier_id);
-  }
+      FROM purchaseitem p
+      LEFT JOIN supplier_ledger s
+        ON p.suplierID = s.supplier_id
+      LEFT JOIN supplier sup ON p.suplierID = sup.supid
+      WHERE sup.created_by = ?
+    `;
 
-  // Conditionally add date range filter if startDate and endDate are provided
-  if (startDate && endDate) {
-    query += " AND p.purchasedate BETWEEN ? AND ?";
-    queryParams.push(startDate, endDate);
-  }
+    const queryParams = [creatorId];
 
-  // Execute the query with the parameters
-  db.pool.query(query, queryParams, (err, results) => {
-    if (err) {
-      console.error('Error fetching purchase transactions:', err);
-      res.status(500).json({ success: false, message: 'An error occurred while fetching purchase transactions' });
-    } else {
-      res.status(200).json({ success: true, data: results, message: 'Purchase transactions fetched successfully' });
+    if (supplier_id) {
+      query += " AND p.suplierID = ?";
+      queryParams.push(supplier_id);
     }
+
+    if (startDate && endDate) {
+      query += " AND p.purchasedate BETWEEN ? AND ?";
+      queryParams.push(startDate, endDate);
+    }
+
+    db.pool.query(query, queryParams, (err, results) => {
+      if (err) {
+        console.error('Error fetching purchase transactions:', err);
+        res.status(500).json({ success: false, message: 'An error occurred while fetching purchase transactions' });
+      } else {
+        res.status(200).json({ success: true, data: results, message: 'Purchase transactions fetched successfully' });
+      }
+    });
   });
 };
 
@@ -469,29 +490,37 @@ const getAllStockIngredientswithone = async (req, res) => {
 const deleteProductionData = async (req, res) => {
   try {
     const { foodid, pvarientid } = req.params;
- 
+    const userId = req.id;
+
     if (!foodid || !pvarientid) {
       return res.status(400).json({ message: 'Missing foodid or pvarientid' });
     }
- 
-    // Check if production records exist
+
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ message: "Unauthorized" });
+
+    // Check if production records exist — verify ownership
     const checkQuery = `
       SELECT * FROM production_details
-      WHERE foodid = ? AND pvarientid = ?
+      WHERE foodid = ? AND pvarientid = ? AND createdby = ?
     `;
-    const existingRecords = await queryDb(checkQuery, [foodid, pvarientid]);
- 
+    const existingRecords = await queryDb(checkQuery, [foodid, pvarientid, creatorId]);
+
     if (existingRecords.length === 0) {
       return res.status(404).json({ message: `No production records found for foodid ${foodid} and pvarientid ${pvarientid}` });
     }
- 
-    // Delete matching records
+
     const deleteQuery = `
       DELETE FROM production_details
-      WHERE foodid = ? AND pvarientid = ?
+      WHERE foodid = ? AND pvarientid = ? AND createdby = ?
     `;
-    await queryDb(deleteQuery, [foodid, pvarientid]);
- 
+    await queryDb(deleteQuery, [foodid, pvarientid, creatorId]);
+
     return res.status(200).json({ message: 'Production details deleted successfully' });
   } catch (err) {
     console.error('Error in deleteProductionData:', err);
@@ -503,36 +532,43 @@ const deleteProductionData = async (req, res) => {
 
 const getPerItemPrice = async (req, res) => {
   const { id } = req.params;
-
-  // SQL query to get the total quantity and total price for a specific ingredient
-  const query = `
-    SELECT SUM(quantity) AS totalquantity, 
-           SUM(totalprice) AS totalprice 
-    FROM purchase_details 
-    WHERE indredientid = ? 
-    GROUP BY indredientid
-  `;
+  const userId = req.id;
 
   try {
-    // Use the dbQuery helper function to execute the query
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    // Verify ingredient belongs to this tenant
+    const checkResult = await dbQuery(`SELECT id FROM ingredients WHERE id = ? AND created_by = ?`, [id, creatorId]);
+    if (!checkResult.length) return res.status(404).send('Ingredient not found');
+
+    const query = `
+      SELECT SUM(quantity) AS totalquantity,
+             SUM(totalprice) AS totalprice
+      FROM purchase_details
+      WHERE indredientid = ?
+      GROUP BY indredientid
+    `;
+
     const result = await dbQuery(query, [id]);
 
-    // Check if the ingredient exists
     if (result.length === 0) {
       return res.status(404).send('Ingredient not found');
     }
 
-    // Extract total quantity and price from the result
     const { totalquantity, totalprice } = result[0];
-    const pricePerIngredient = totalprice / totalquantity; // Calculate price per ingredient
+    const pricePerIngredient = totalprice / totalquantity;
 
-    // Return the result in a response
     return res.status(200).json({
       data: [{ Price: pricePerIngredient }]
     });
 
   } catch (err) {
-    // Handle errors in the database query
     console.error('Error fetching total quantity and price:', err);
     return res.status(500).send('Server error');
   }
@@ -598,17 +634,26 @@ const createproduction = async (req, res) => {
 
 const findbyIdProductiondetails = async (req, res) => {
   const { foodid, pvarientid } = req.params;
+  const userId = req.id;
 
   try {
-      // Query to fetch production details
+      const [userRows] = await db.pool.promise().query(
+        "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+      );
+      if (!userRows.length) return res.status(404).send({ message: "User not found" });
+      const { is_admin, created_by } = userRows[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).send({ message: "Unauthorized" });
+
+      // Query to fetch production details — with ownership check
       const sql = `
         SELECT p.foodid, p.pvarientid, p.ingredientid, p.qty AS productionqty
         FROM production_details p
-        WHERE p.foodid = ? AND p.pvarientid = ?
+        WHERE p.foodid = ? AND p.pvarientid = ? AND p.createdby = ?
       `;
 
       // Execute the query to get production details
-      const productionDetails = await queryDb(sql, [foodid, pvarientid]);
+      const productionDetails = await queryDb(sql, [foodid, pvarientid, creatorId]);
 
       // Check if any production details are found
       if (!productionDetails || productionDetails.length === 0) {
@@ -655,7 +700,7 @@ const findbyIdProductiondetails = async (req, res) => {
       const itemDetails = purchaseDetails.map(detail => {
           // Find the matching production quantity for this ingredient
           const productionDetail = productionDetails.find(item => item.ingredientid === detail.indredientid);
-          
+
           // Find the matching ingredient name
           const ingredientName = ingredientNameFetchQuery.find(item => item.id === detail.indredientid);
           const ingredientNameValue = ingredientName ? ingredientName.ingredient_name : 'Unknown Ingredient';
@@ -697,17 +742,26 @@ const findbyIdProductiondetails = async (req, res) => {
 
 const viewProductiondetails = async (req, res) => {
   const { foodid, pvarientid } = req.params;
+  const userId = req.id;
 
   try {
-      // Query to fetch production details
+      const [userRows] = await db.pool.promise().query(
+        "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+      );
+      if (!userRows.length) return res.status(404).send({ message: "User not found" });
+      const { is_admin, created_by } = userRows[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).send({ message: "Unauthorized" });
+
+      // Query to fetch production details — with ownership check
       const sql = `
         SELECT p.foodid, p.pvarientid, p.ingredientid, p.qty AS productionqty
         FROM production_details p
-        WHERE p.foodid = ? AND p.pvarientid = ?
+        WHERE p.foodid = ? AND p.pvarientid = ? AND p.createdby = ?
       `;
 
       // Execute the query to get production details
-      const productionDetails = await queryDb(sql, [foodid, pvarientid]);
+      const productionDetails = await queryDb(sql, [foodid, pvarientid, creatorId]);
 
       // Check if any production details are found
       if (!productionDetails || productionDetails.length === 0) {

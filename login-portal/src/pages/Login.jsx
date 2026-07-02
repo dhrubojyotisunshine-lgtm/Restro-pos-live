@@ -6,6 +6,7 @@ import fallback from "../assets/Group 206124.png";
 const Login = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const VITE_IMG_URL = import.meta.env.VITE_IMG_URL;
+  const APP_URL = import.meta.env.VITE_APP_URL;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -50,7 +51,7 @@ const Login = () => {
       if (superAdmin && websitelink) {
         window.location.href = websitelink;
       } else {
-        window.location.href = "http://localhost:5173/frontend";
+        window.location.href = APP_URL;
       }
     } catch (error) {
       toast.error(

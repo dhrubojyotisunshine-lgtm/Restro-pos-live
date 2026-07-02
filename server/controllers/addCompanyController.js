@@ -1630,17 +1630,14 @@ exports.addUserSubscriptionAdmin = async (req, res) => {
 
     const plan = planRows[0];
 
-    // 3. Get user's latest plan to set start date
-    const [latestPlan] = await db.pool.promise().query(
-      `SELECT end_date FROM superadmin_user_plans WHERE user_id = ? ORDER BY user_plan_id DESC LIMIT 1`,
+    // 3. Check if an existing approved plan exists for this user
+    const [existingPlan] = await db.pool.promise().query(
+      `SELECT user_plan_id FROM superadmin_user_plans WHERE user_id = ? AND package_status = 'approved' ORDER BY user_plan_id DESC LIMIT 1`,
       [user_id]
     );
 
-    const now = new Date();
-    const lastEnd = latestPlan.length ? new Date(latestPlan[0].end_date) : null;
-    const startDate = lastEnd && lastEnd > now ? lastEnd : now;
-
-    // 4. Calculate end date and trial end date
+    // 4. Calculate dates from now using the new plan
+    const startDate = new Date();
     const endDate = new Date(startDate);
     if (plan.price_interval === 'Day') endDate.setDate(endDate.getDate() + plan.interval_value);
     if (plan.price_interval === 'Month') endDate.setMonth(endDate.getMonth() + plan.interval_value);
@@ -1648,36 +1645,36 @@ exports.addUserSubscriptionAdmin = async (req, res) => {
 
     const trialEnd = new Date(startDate);
     trialEnd.setDate(trialEnd.getDate() + plan.trial_days);
-    endDate.setDate(endDate.getDate() + plan.trial_days); // Add trial to total duration
+    endDate.setDate(endDate.getDate() + plan.trial_days);
 
     const formatDate = (d) => d.toISOString().slice(0, 10);
     const formattedStartDate = formatDate(startDate);
     const formattedEndDate = formatDate(endDate);
     const formattedTrialEndDate = formatDate(trialEnd);
 
-    // 5. Insert subscription
-    const insertQuery = `
-      INSERT INTO superadmin_user_plans 
-        (user_id, plan_id, start_date, end_date, trial_date, package_status, created_by, created_at, payment_type, payment_method)
-      VALUES 
-        (?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?)
-    `;
-
     const status = is_superadmin ? 'approved' : 'pending';
 
-    await db.pool.promise().query(insertQuery, [
-      user_id,
-      plan_id,
-      formattedStartDate,
-      formattedEndDate,
-      formattedTrialEndDate,
-      status,
-      created_by,
-      paid_via,
-      transaction_id
-    ]);
+    if (existingPlan.length > 0) {
+      // 5a. Archive old approved plan as history, then insert new active row
+      await db.pool.promise().query(
+        `UPDATE superadmin_user_plans SET package_status = 'superseded' WHERE user_plan_id = ?`,
+        [existingPlan[0].user_plan_id]
+      );
+    }
 
-    return res.status(201).json({ message: 'Subscription added successfully' });
+    // 5b. Insert new plan row (first-time or renewal/upgrade)
+    await db.pool.promise().query(
+      `INSERT INTO superadmin_user_plans
+        (user_id, plan_id, start_date, end_date, trial_date, package_status, created_by, created_at, payment_type, payment_method)
+       VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE(), ?, ?)`,
+      [user_id, plan_id, formattedStartDate, formattedEndDate, formattedTrialEndDate,
+       status, created_by, paid_via, transaction_id]
+    );
+
+    const isRenewal = existingPlan.length > 0;
+    return res.status(201).json({
+      message: isRenewal ? 'Subscription renewed successfully' : 'Subscription added successfully'
+    });
 
   } catch (err) {
     console.error('Error adding subscription:', err);
@@ -2347,5 +2344,61 @@ exports.getTimezonesall = (req, res) => {
     }
     res.json({ data: results });
   });
+};
+
+// License key for the logged-in admin based on their active subscription
+exports.getAdminSubscriptionKey = async (req, res) => {
+  try {
+    const userId = req.id;
+
+    const [plans] = await db.pool.promise().query(
+      `SELECT sup.user_plan_id, sup.plan_id, sup.start_date, sup.end_date, sup.package_status
+       FROM superadmin_user_plans sup
+       WHERE sup.user_id = ? AND sup.package_status = 'approved'
+       ORDER BY sup.user_plan_id DESC LIMIT 1`,
+      [userId]
+    );
+
+    if (plans.length === 0) {
+      return res.status(200).json({
+        success: false,
+        expired: true,
+        message: "No active subscription found. Please purchase a plan.",
+      });
+    }
+
+    const plan = plans[0];
+    const now = new Date();
+    const endDate = new Date(plan.end_date);
+
+    if (endDate < now) {
+      return res.status(200).json({
+        success: false,
+        expired: true,
+        message: "Your subscription has expired. Please renew your plan.",
+      });
+    }
+
+    // Build license key: LTC-ADM{userId padded}-PKG{planId padded}-{startDate YYYYMMDD}-STG{planRowId padded}
+    const adminPart = "ADM" + String(userId).padStart(3, "0");
+    const pkgPart = "PKG" + String(plan.plan_id).padStart(2, "0");
+    const startDate = new Date(plan.start_date);
+    const datePart =
+      startDate.getFullYear().toString() +
+      String(startDate.getMonth() + 1).padStart(2, "0") +
+      String(startDate.getDate()).padStart(2, "0");
+    const hashPart = "STG" + String(plan.user_plan_id).padStart(5, "0");
+
+    const subscriptionKey = `LTC-${adminPart}-${pkgPart}-${datePart}-${hashPart}`;
+
+    return res.status(200).json({
+      success: true,
+      expired: false,
+      data: { subscription_key: subscriptionKey },
+    });
+  } catch (err) {
+    console.error("Error in getAdminSubscriptionKey:", err);
+    return res.status(500).json({ error: err.message });
+  }
 };
 

@@ -8,6 +8,7 @@ const AddCompany = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const APP_URL = import.meta.env.VITE_APP_URL;
   const VITE_IMG_URL = import.meta.env.VITE_IMG_URL;
+  const token = localStorage.getItem("token");
   const [currencies, setCurrencies] = useState([]);
   const [timezones, setTimezones] = useState([]);
   const [selectedCurrency, setSelectedCurrency] = useState("");
@@ -20,9 +21,7 @@ const AddCompany = () => {
   
   const fetchCurrencies = async () => {
     try {
-      const response = await axios.get(
-        "https://krayon.softwarestesting.co.in/api/symbol"
-      );
+      const response = await axios.get(`${API_BASE_URL}/symbol`);
       if (response.data && Array.isArray(response.data.data)) {
         setCurrencies(response.data.data);
       }
@@ -34,9 +33,7 @@ const AddCompany = () => {
   // Fetch timezones
   const fetchTimezones = async () => {
     try {
-      const response = await axios.get(
-        "https://krayon.softwarestesting.co.in/api/timezone"
-      );
+      const response = await axios.get(`${API_BASE_URL}/timezone`);
       if (response.data && Array.isArray(response.data.data)) {
         setTimezones(response.data.data);
       }
@@ -192,7 +189,7 @@ const AddCompany = () => {
 
   try {
     const res = await axios.post(`${API_BASE_URL}/createcompany`, formData1, {
-      headers: { "Content-Type": "multipart/form-data" },
+      headers: { "Content-Type": "multipart/form-data", Authorization: token },
     });
 
     if (res.status === 201) {

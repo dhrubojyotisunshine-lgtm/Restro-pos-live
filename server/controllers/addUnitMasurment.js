@@ -152,26 +152,25 @@ const getUnitMeasurements = async (req, res) => {
 const deleteUnitMeasurement = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    const deleteUnit = "DELETE FROM unit_of_measurement WHERE id = ?";
-
-    db.pool.query(deleteUnit, [id], (err, result) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res
-          .status(500)
-          .json({ success: false, message: "An error occurred" });
-      }
-
-      if (result.affectedRows === 0) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Unit of measurement not found" });
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: "Unit of measurement deleted successfully",
+      const deleteUnit = "DELETE FROM unit_of_measurement WHERE id = ? AND created_by = ?";
+      db.pool.query(deleteUnit, [id, creatorId], (err, result) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({ success: false, message: "An error occurred" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Unit of measurement not found" });
+        }
+        return res.status(200).json({ success: true, message: "Unit of measurement deleted successfully" });
       });
     });
   } catch (error) {
@@ -183,79 +182,49 @@ const deleteUnitMeasurement = async (req, res) => {
 const updateUnitMeasurement = async (req, res) => {
   try {
     const { id } = req.params;
-    const { uom_name, uom_short_code, is_active, created_by } = req.body;
- 
-    // Check if the unit of measurement exists
-    const getUnitQuery = 'SELECT * FROM unit_of_measurement WHERE id = ?';
-    db.pool.query(getUnitQuery, [id], (err, results) => {
-      if (err) {
-        console.error('Error retrieving unit of measurement:', err);
-        return res.status(500).json({
-          success: false,
-          message: 'An error occurred while retrieving the unit of measurement'
-        });
-      }
- 
-      if (results.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: 'Unit of measurement not found'
-        });
-      }
- 
-      // Get the current data
-      const currentData = results[0];
- 
-      // Update only the provided fields, keeping current values for unspecified fields
-      const updatedData = {
-        uom_name: uom_name !== undefined ? uom_name : currentData.uom_name,
-        uom_short_code: uom_short_code !== undefined ? uom_short_code : currentData.uom_short_code,
-        is_active: is_active !== undefined ? is_active : currentData.is_active,
-        created_by: created_by !== undefined ? created_by : currentData.created_by
-      };
- 
-      // Update the unit of measurement
-      const updateUnitQuery = `
-        UPDATE unit_of_measurement
-        SET uom_name = ?, uom_short_code = ?, is_active = ?, created_by = ?
-        WHERE id = ?
-      `;
-      const values = [
-        updatedData.uom_name,
-        updatedData.uom_short_code,
-        updatedData.is_active,
-        updatedData.created_by,
-        id
-      ];
- 
-      db.pool.query(updateUnitQuery, values, (err, result) => {
+    const { uom_name, uom_short_code, is_active } = req.body;
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by: uc } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : uc;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const getUnitQuery = "SELECT * FROM unit_of_measurement WHERE id = ? AND created_by = ?";
+      db.pool.query(getUnitQuery, [id, creatorId], (err, results) => {
         if (err) {
-          console.error('Error updating unit of measurement:', err);
-          return res.status(500).json({
-            success: false,
-            message: 'An error occurred while updating the unit of measurement'
-          });
+          console.error("Error retrieving unit of measurement:", err);
+          return res.status(500).json({ success: false, message: "An error occurred while retrieving the unit of measurement" });
         }
- 
-        if (result.affectedRows === 0) {
-          return res.status(404).json({
-            success: false,
-            message: 'Unit of measurement not found'
-          });
+        if (results.length === 0) {
+          return res.status(404).json({ success: false, message: "Unit of measurement not found" });
         }
- 
-        return res.status(200).json({
-          success: true,
-          message: 'Unit of measurement updated successfully'
+        const currentData = results[0];
+        const updatedData = {
+          uom_name: uom_name !== undefined ? uom_name : currentData.uom_name,
+          uom_short_code: uom_short_code !== undefined ? uom_short_code : currentData.uom_short_code,
+          is_active: is_active !== undefined ? is_active : currentData.is_active,
+          created_by: currentData.created_by,
+        };
+        const updateUnitQuery = `UPDATE unit_of_measurement SET uom_name = ?, uom_short_code = ?, is_active = ?, created_by = ? WHERE id = ?`;
+        db.pool.query(updateUnitQuery, [updatedData.uom_name, updatedData.uom_short_code, updatedData.is_active, updatedData.created_by, id], (err, result) => {
+          if (err) {
+            console.error("Error updating unit of measurement:", err);
+            return res.status(500).json({ success: false, message: "An error occurred while updating the unit of measurement" });
+          }
+          if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: "Unit of measurement not found" });
+          }
+          return res.status(200).json({ success: true, message: "Unit of measurement updated successfully" });
         });
       });
     });
   } catch (error) {
-    console.error('Unexpected error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'An unexpected error occurred'
-    });
+    console.error("Unexpected error:", error);
+    return res.status(500).json({ success: false, message: "An unexpected error occurred" });
   }
 };
 
@@ -265,30 +234,33 @@ const getUnitMeasurementById = async (req, res) => {
     const { id } = req.params;
 
     if (!id) {
-      return res.status(400).json({ success: false, message: 'ID parameter is required' });
+      return res.status(400).json({ success: false, message: "ID parameter is required" });
     }
 
-    const getUnitByIdQuery = `SELECT * FROM unit_of_measurement WHERE id = ?`;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    db.pool.query(getUnitByIdQuery, [id], (err, result) => {
-      if (err) {
-        console.log(err);
-        return res.status(500).json({ success: false, message: 'An error occurred' });
-      }
-
-      if (result.length === 0) {
-        return res.status(404).json({ success: false, message: 'Unit of measurement not found' });
-      }
-
-      res.status(200).json({
-        success: true,
-        data: result[0],
-        message: 'Unit of measurement fetched successfully',
+      const getUnitByIdQuery = `SELECT * FROM unit_of_measurement WHERE id = ? AND created_by = ?`;
+      db.pool.query(getUnitByIdQuery, [id, creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).json({ success: false, message: "An error occurred" });
+        }
+        if (result.length === 0) {
+          return res.status(404).json({ success: false, message: "Unit of measurement not found" });
+        }
+        res.status(200).json({ success: true, data: result[0], message: "Unit of measurement fetched successfully" });
       });
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: 'An error occurred' });
+    res.status(500).json({ success: false, message: "An error occurred" });
   }
 };
 

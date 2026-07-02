@@ -25,14 +25,15 @@ router.post("/data", upload.single("image"), auth, dataController.addCategory);
 router.post(
   "/bulkupload",
   upload.single("image"),
+  auth,
   dataController.addCategoriesBulk
 );
-router.delete("/data/:id", dataController.deletCategory);
+router.delete("/data/:id", auth, dataController.deletCategory);
 router.put(
   "/data/:id",
   upload.single("image"),
   auth,
   dataController.updateCategory
 );
-router.get("/data/:id", dataController.getCategoryById);
+router.get("/data/:id", auth, dataController.getCategoryById);
 module.exports = router;

@@ -217,7 +217,7 @@ const CompanyList = () => {
 
   const getCompany = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/getcompany`);
+      const response = await axios.get(`${API_BASE_URL}/getcompany`, { headers: { Authorization: token } });
       if (response.status === 200) {
         setData(response.data.data);
       }
@@ -229,7 +229,7 @@ const CompanyList = () => {
 
   const getallPackages = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/getallpackages`);
+      const res = await axios.get(`${API_BASE_URL}/getallpackages`, { headers: { Authorization: token } });
       setData2(res.data.data);
     } catch (error) {
       console.log(error);
@@ -254,7 +254,7 @@ const CompanyList = () => {
 
   const DeleteUnit = (id) => {
     axios
-      .delete(`${API_BASE_URL}/deletecompany/${id}`)
+      .delete(`${API_BASE_URL}/deletecompany/${id}`, { headers: { Authorization: token } })
       .then((response) => {
         if (response.status === 200) {
           toast.success("Company deleted successfully!");
@@ -285,7 +285,7 @@ const CompanyList = () => {
 
   const Deactivatecompany = (id) => {
     axios
-      .put(`${API_BASE_URL}/deactive/${id}`)
+      .put(`${API_BASE_URL}/deactive/${id}`, {}, { headers: { Authorization: token } })
       .then((response) => {
         if (response.status === 200) {
           toast.success("Company Deactivated successfully!");
@@ -316,7 +316,7 @@ const CompanyList = () => {
 
   const Activatecompany = (id) => {
     axios
-      .put(`${API_BASE_URL}/active/${id}`)
+      .put(`${API_BASE_URL}/active/${id}`, {}, { headers: { Authorization: token } })
       .then((response) => {
         if (response.status === 200) {
           toast.success("Company Activated successfully!");
@@ -402,9 +402,8 @@ const CompanyList = () => {
 
   const handleEditClick = (id) => {
     setEditId(id);
-    setIsModalOpen(true);
     axios
-      .get(`${API_BASE_URL}/getcompanyby/${id}`)
+      .get(`${API_BASE_URL}/getcompanyby/${id}`, { headers: { Authorization: token } })
       .then((response) => {
         const data = response.data.data;
 
@@ -441,6 +440,7 @@ const CompanyList = () => {
           email: data.email,
           password: "",
         });
+        setIsModalOpen(true);
       })
       .catch((error) => {
         console.error("Error fetching company data:", error);
@@ -491,7 +491,7 @@ const CompanyList = () => {
         `${API_BASE_URL}/updatecompany/${editId}`,
         formDataToSend,
         {
-          headers: { "Content-Type": "multipart/form-data" },
+          headers: { "Content-Type": "multipart/form-data", Authorization: token },
         }
       );
       toast.success("Company updated successfully!");
@@ -546,7 +546,7 @@ const CompanyList = () => {
 
   const fetchData = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/getcompany`);
+      const response = await axios.get(`${API_BASE_URL}/getcompany`, { headers: { Authorization: token } });
       return response.data.data;
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -671,11 +671,30 @@ const CompanyList = () => {
   });
 
   // add subscription
-  const handleAddSubscription = (sl_no, email) => {
-    setSubscriptionData((prev) => ({
-      ...prev,
+  const handleAddSubscription = async (sl_no, email) => {
+    setSubscriptionData({
+      plan_id: "",
       email: email,
-    }));
+      paid_via: "",
+      transaction_id: "",
+      is_superadmin: true,
+    });
+
+    try {
+      const res = await axios.get(`${API_BASE_URL}/runningpackage/${encodeURIComponent(email)}`, {
+        headers: { Authorization: token },
+      });
+      const current = res.data?.currentPackage;
+      if (current) {
+        setSubscriptionData((prev) => ({
+          ...prev,
+          plan_id: String(current.planId || ""),
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to fetch existing subscription:", error);
+    }
+
     setIsModalOpen1(true);
   };
 
@@ -694,7 +713,7 @@ const CompanyList = () => {
       await axios.post(`${API_BASE_URL}/addsubscription`, subscriptionData, {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: token,
         },
       });
 

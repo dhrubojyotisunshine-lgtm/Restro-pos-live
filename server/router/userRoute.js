@@ -4,7 +4,6 @@ const path = require("path");
 const router = express.Router();
 const axios =require("axios")
 const auth =require("../middleware/authicantejwt")
-// const authenticateJWT = require("../middleware/middleware");
 const userControllers = require("../controllers/userController");
 
 const multerStorage = multer.diskStorage({
@@ -25,11 +24,11 @@ const upload = multer({
 });
 
 router.post("/add", upload.single("image"),auth, userControllers.addUser);
-router.post("/add-bulk-user", userControllers.addBulkUsers);
+router.post("/add-bulk-user", auth, userControllers.addBulkUsers);
 router.get("/all",auth, userControllers.getUsers)
-router.delete("/deleteuser/:id", userControllers.deleteUser);
-router.get("/userbyid/:id",userControllers.getUserById)
-router.put("/updateuser/:id", upload.single("image"), userControllers.updateUser);
+router.delete("/deleteuser/:id", auth, userControllers.deleteUser);
+router.get("/userbyid/:id", auth, userControllers.getUserById)
+router.put("/updateuser/:id", upload.single("image"), auth, userControllers.updateUser);
 
 
 // log in api routs
@@ -38,8 +37,8 @@ router.post("/logout/:id", userControllers.logoutUser);
 
 router.get('/countries', userControllers.getAllCountry);
 
-// check-in 
-router.get('/checkin',userControllers.checkIncheckOut);
+// check-in
+router.get('/checkin', auth, userControllers.checkIncheckOut);
 
 // forgot pass
 router.post("/forgetpassword",userControllers.ForgetPasswordController)

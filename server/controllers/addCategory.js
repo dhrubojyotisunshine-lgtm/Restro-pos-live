@@ -40,7 +40,7 @@ const getCategory = (req, res) => {
           i.parentid,
           i.CategoryImage,
           i.CategoryIsActive,
-          i.kitchen_id, 
+          i.kitchen_id,
           p.Name AS parent_name,
           p.CategoryID AS parent_id
         FROM item_category i
@@ -226,7 +226,7 @@ const addCategory = (req, res) => {
 };
 
 const addCategoriesBulk = (req, res) => {
-  const UserIDInserted = req.id;
+  const userId = req.id;
   let categories = req.body.categories;
 
   if (!Array.isArray(categories) || categories.length === 0) {
@@ -242,166 +242,188 @@ const addCategoriesBulk = (req, res) => {
     return res.status(400).json({ error: "No valid categories to insert" });
   }
 
-  try {
-    const sql = `
-      INSERT INTO item_category 
-      (\`Name\`, \`parentid\`, \`offerstartdate\`, \`offerendate\`, \`CategoryIsActive\`, \`CategoryImage\`, \`isoffer\`, \`UserIDInserted\`) 
-      VALUES ?
-    `;
+  // Resolve creatorId before bulk insert
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
 
-    const values = categories.map((category) => [
-      category.name.trim(),
-      category.parentid || null,
-      category.offerstartdate || null,
-      category.offerendate || null,
-      category.status || 1, // Default active
-      category.filename || null,
-      category.isoffer || 0,
-      UserIDInserted,
-    ]);
+    try {
+      const sql = `
+        INSERT INTO item_category
+        (\`Name\`, \`parentid\`, \`offerstartdate\`, \`offerendate\`, \`CategoryIsActive\`, \`CategoryImage\`, \`isoffer\`, \`UserIDInserted\`)
+        VALUES ?
+      `;
 
-    db.pool.query(sql, [values], (err, result) => {
-      if (err) {
-        console.error("Database query error: ", err);
-        return res.status(500).json({ error: "Internal Server Error" });
-      }
-      return res.json({
-        message: `${result.affectedRows} categories inserted successfully`,
+      const values = categories.map((category) => [
+        category.name.trim(),
+        category.parentid || null,
+        category.offerstartdate || null,
+        category.offerendate || null,
+        category.status || 1,
+        category.filename || null,
+        category.isoffer || 0,
+        creatorId,
+      ]);
+
+      db.pool.query(sql, [values], (err, result) => {
+        if (err) {
+          console.error("Database query error: ", err);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+        return res.json({
+          message: `${result.affectedRows} categories inserted successfully`,
+        });
       });
-    });
-  } catch (error) {
-    console.error("Error: ", error);
-    return res.status(500).json({ error: "Internal Server Error" });
-  }
+    } catch (error) {
+      console.error("Error: ", error);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+  });
 };
 
 const deletCategory = (req, res) => {
   const id = req.params.id;
+  const userId = req.id;
 
-  const fetchImageSql =
-    "SELECT CategoryImage FROM item_category WHERE CategoryID = ?";
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
 
-  // Query to delete items related to the category in the item_foods table
-  const deleteItemRelatedCategory =
-    "DELETE FROM item_foods WHERE CategoryID = ?";
+    // Verify ownership before fetching/deleting
+    const fetchImageSql =
+      "SELECT CategoryImage FROM item_category WHERE CategoryID = ? AND UserIDInserted = ?";
 
-  // Query to delete variants related to the items in the variant table
-  const deleteRelatedItemVariant =
-    "DELETE FROM variant WHERE menuID IN (SELECT ProductsID FROM item_foods WHERE CategoryID = ?)";
+    // Query to delete items related to the category in the item_foods table
+    const deleteItemRelatedCategory =
+      "DELETE FROM item_foods WHERE CategoryID = ?";
 
-  // Query to delete related add-ons in the menu_add_on table
-  const deleteRelatedAddon =
-    "DELETE FROM menu_add_on WHERE menu_id IN (SELECT ProductsID FROM item_foods WHERE CategoryID = ?)";
+    // Query to delete variants related to the items in the variant table
+    const deleteRelatedItemVariant =
+      "DELETE FROM variant WHERE menuID IN (SELECT ProductsID FROM item_foods WHERE CategoryID = ?)";
 
-  // Query to delete the category itself
-  const deleteCategorySql = "DELETE FROM item_category WHERE CategoryID = ?";
+    // Query to delete related add-ons in the menu_add_on table
+    const deleteRelatedAddon =
+      "DELETE FROM menu_add_on WHERE menu_id IN (SELECT ProductsID FROM item_foods WHERE CategoryID = ?)";
 
-  db.pool.query(fetchImageSql, [id], (fetchErr, fetchData) => {
-    if (fetchErr) {
-      console.error("Database fetch error: ", fetchErr);
-      return res.status(500).json({ error: "Internal Server Error" });
-    }
+    // Query to delete the category itself
+    const deleteCategorySql = "DELETE FROM item_category WHERE CategoryID = ?";
 
-    if (fetchData.length === 0) {
-      return res.status(404).json({ error: "Category not found" });
-    }
+    db.pool.query(fetchImageSql, [id, creatorId], (fetchErr, fetchData) => {
+      if (fetchErr) {
+        console.error("Database fetch error: ", fetchErr);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
 
-    const imageFilename = fetchData[0].CategoryImage;
+      if (fetchData.length === 0) {
+        return res.status(404).json({ error: "Category not found" });
+      }
 
-    // Delete related add-ons
-    db.pool.query(
-      deleteRelatedAddon,
-      [id],
-      (addonDeleteErr, addonDeleteData) => {
-        if (addonDeleteErr) {
-          console.error("Error deleting related add-ons: ", addonDeleteErr);
-          return res.status(500).json({ error: "Internal Server Error" });
-        }
+      const imageFilename = fetchData[0].CategoryImage;
 
-        // Delete related variants
-        db.pool.query(
-          deleteRelatedItemVariant,
-          [id],
-          (variantDeleteErr, variantDeleteData) => {
-            if (variantDeleteErr) {
-              console.error(
-                "Error deleting related variants: ",
-                variantDeleteErr,
-              );
-              return res.status(500).json({ error: "Internal Server Error" });
-            }
+      // Delete related add-ons
+      db.pool.query(
+        deleteRelatedAddon,
+        [id],
+        (addonDeleteErr, addonDeleteData) => {
+          if (addonDeleteErr) {
+            console.error("Error deleting related add-ons: ", addonDeleteErr);
+            return res.status(500).json({ error: "Internal Server Error" });
+          }
 
-            // Delete related items in the item_foods table
-            db.pool.query(
-              deleteItemRelatedCategory,
-              [id],
-              (itemDeleteErr, itemDeleteData) => {
-                if (itemDeleteErr) {
-                  console.error(
-                    "Error deleting related items: ",
-                    itemDeleteErr,
-                  );
-                  return res
-                    .status(500)
-                    .json({ error: "Internal Server Error" });
-                }
+          // Delete related variants
+          db.pool.query(
+            deleteRelatedItemVariant,
+            [id],
+            (variantDeleteErr, variantDeleteData) => {
+              if (variantDeleteErr) {
+                console.error(
+                  "Error deleting related variants: ",
+                  variantDeleteErr,
+                );
+                return res.status(500).json({ error: "Internal Server Error" });
+              }
 
-                // Delete the category itself
-                db.pool.query(
-                  deleteCategorySql,
-                  [id],
-                  (deleteErr, deleteData) => {
-                    if (deleteErr) {
-                      console.error("Error deleting category: ", deleteErr);
-                      return res
-                        .status(500)
-                        .json({ error: "Internal Server Error" });
-                    }
+              // Delete related items in the item_foods table
+              db.pool.query(
+                deleteItemRelatedCategory,
+                [id],
+                (itemDeleteErr, itemDeleteData) => {
+                  if (itemDeleteErr) {
+                    console.error(
+                      "Error deleting related items: ",
+                      itemDeleteErr,
+                    );
+                    return res
+                      .status(500)
+                      .json({ error: "Internal Server Error" });
+                  }
 
-                    if (imageFilename) {
-                      const filePath = path.join(
-                        __dirname,
-                        "../asset/category",
-                        imageFilename,
-                      );
-                      if (fs.existsSync(filePath)) {
-                        fs.unlink(filePath, (unlinkErr) => {
-                          if (unlinkErr) {
-                            console.error("Error deleting file: ", unlinkErr);
-                            return res
-                              .status(500)
-                              .json({ error: "File deletion error" });
-                          }
+                  // Delete the category itself
+                  db.pool.query(
+                    deleteCategorySql,
+                    [id],
+                    (deleteErr, deleteData) => {
+                      if (deleteErr) {
+                        console.error("Error deleting category: ", deleteErr);
+                        return res
+                          .status(500)
+                          .json({ error: "Internal Server Error" });
+                      }
+
+                      if (imageFilename) {
+                        const filePath = path.join(
+                          __dirname,
+                          "../asset/category",
+                          imageFilename,
+                        );
+                        if (fs.existsSync(filePath)) {
+                          fs.unlink(filePath, (unlinkErr) => {
+                            if (unlinkErr) {
+                              console.error("Error deleting file: ", unlinkErr);
+                              return res
+                                .status(500)
+                                .json({ error: "File deletion error" });
+                            }
+                            return res.json({
+                              message:
+                                "Category, related items, add-ons, and file deleted successfully",
+                            });
+                          });
+                        } else {
                           return res.json({
                             message:
-                              "Category, related items, add-ons, and file deleted successfully",
+                              "Category, related items, and add-ons deleted successfully, image file not found",
                           });
-                        });
+                        }
                       } else {
                         return res.json({
                           message:
-                            "Category, related items, and add-ons deleted successfully, image file not found",
+                            "Category, related items, and add-ons deleted successfully, no associated image",
                         });
                       }
-                    } else {
-                      return res.json({
-                        message:
-                          "Category, related items, and add-ons deleted successfully, no associated image",
-                      });
-                    }
-                  },
-                );
-              },
-            );
-          },
-        );
-      },
-    );
+                    },
+                  );
+                },
+              );
+            },
+          );
+        },
+      );
+    });
   });
 };
 
 const updateCategory = (req, res) => {
   const { id } = req.params;
+  const userId = req.id;
 
   const {
     name,
@@ -442,92 +464,102 @@ const updateCategory = (req, res) => {
 
   const categoryId = Number(id);
 
-  // ===============================
-  // FETCH OLD IMAGE
-  // ===============================
-  const fetchImageSql =
-    "SELECT CategoryImage FROM item_category WHERE CategoryID = ?";
-
-  db.pool.query(fetchImageSql, [categoryId], (fetchErr, fetchData) => {
-    if (fetchErr) {
-      console.log("FETCH ERROR:", fetchErr.sqlMessage);
-      return res.status(500).json({
-        success: false,
-        error: fetchErr.sqlMessage,
-      });
-    }
-
-    if (fetchData.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
-
-    const currentImageFilename = fetchData[0].CategoryImage;
+  // Resolve creatorId
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
 
     // ===============================
-    // UPDATE QUERY
+    // FETCH OLD IMAGE — verify ownership
     // ===============================
-    const sql = `
-      UPDATE item_category
-      SET 
-        Name = ?,
-        parentid = ?,
-        offerstartdate = ?,
-        offerendate = ?,
-        CategoryIsActive = ?,
-        CategoryImage = ?,
-        isoffer = ?,
-        kitchen_id = ?
-      WHERE CategoryID = ?
-    `;
+    const fetchImageSql =
+      "SELECT CategoryImage FROM item_category WHERE CategoryID = ? AND UserIDInserted = ?";
 
-    const values = [
-      name,
-      safeParentId,
-      safeOfferStart,
-      safeOfferEnd,
-      safeStatus,
-      filename || currentImageFilename,
-      safeIsOffer,
-      safeKitchenId,
-      categoryId,
-    ];
-
-    db.pool.query(sql, values, (err, result) => {
-      if (err) {
-        console.log("UPDATE ERROR:", err.sqlMessage);
+    db.pool.query(fetchImageSql, [categoryId, creatorId], (fetchErr, fetchData) => {
+      if (fetchErr) {
+        console.log("FETCH ERROR:", fetchErr.sqlMessage);
         return res.status(500).json({
           success: false,
-          error: err.sqlMessage,
+          error: fetchErr.sqlMessage,
         });
       }
 
-      // ===============================
-      // DELETE OLD IMAGE IF NEW UPLOADED
-      // ===============================
-      if (filename && currentImageFilename) {
-        const oldFilePath = path.join(
-          __dirname,
-          "../asset/category",
-          currentImageFilename,
-        );
-
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlink(oldFilePath, (unlinkErr) => {
-            if (unlinkErr) {
-              console.log("OLD IMAGE DELETE ERROR:", unlinkErr);
-            } else {
-              console.log("Old image deleted");
-            }
-          });
-        }
+      if (fetchData.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Category not found",
+        });
       }
 
-      return res.json({
-        success: true,
-        message: "Category updated successfully",
+      const currentImageFilename = fetchData[0].CategoryImage;
+
+      // ===============================
+      // UPDATE QUERY
+      // ===============================
+      const sql = `
+        UPDATE item_category
+        SET
+          Name = ?,
+          parentid = ?,
+          offerstartdate = ?,
+          offerendate = ?,
+          CategoryIsActive = ?,
+          CategoryImage = ?,
+          isoffer = ?,
+          kitchen_id = ?
+        WHERE CategoryID = ?
+      `;
+
+      const values = [
+        name,
+        safeParentId,
+        safeOfferStart,
+        safeOfferEnd,
+        safeStatus,
+        filename || currentImageFilename,
+        safeIsOffer,
+        safeKitchenId,
+        categoryId,
+      ];
+
+      db.pool.query(sql, values, (err, result) => {
+        if (err) {
+          console.log("UPDATE ERROR:", err.sqlMessage);
+          return res.status(500).json({
+            success: false,
+            error: err.sqlMessage,
+          });
+        }
+
+        // ===============================
+        // DELETE OLD IMAGE IF NEW UPLOADED
+        // ===============================
+        if (filename && currentImageFilename) {
+          const oldFilePath = path.join(
+            __dirname,
+            "../asset/category",
+            currentImageFilename,
+          );
+
+          if (fs.existsSync(oldFilePath)) {
+            fs.unlink(oldFilePath, (unlinkErr) => {
+              if (unlinkErr) {
+                console.log("OLD IMAGE DELETE ERROR:", unlinkErr);
+              } else {
+                console.log("Old image deleted");
+              }
+            });
+          }
+        }
+
+        return res.json({
+          success: true,
+          message: "Category updated successfully",
+        });
       });
     });
   });
@@ -535,37 +567,47 @@ const updateCategory = (req, res) => {
 
 const getCategoryById = (req, res) => {
   const categoryId = req.params.id;
+  const userId = req.id;
 
-  let sql = `
-    SELECT
-     i.*,
-      p.Name AS parent_name,
-      p.CategoryID AS parent_id
-    FROM item_category i
-    LEFT JOIN item_category p ON i.parentid = p.CategoryID
-    WHERE i.CategoryID = ?
-  `;
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
 
-  db.pool.query(sql, [categoryId], (err, data) => {
-    if (err) {
-      console.error("Database query error:", err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Internal Server Error" });
-    }
+    let sql = `
+      SELECT
+       i.*,
+        p.Name AS parent_name,
+        p.CategoryID AS parent_id
+      FROM item_category i
+      LEFT JOIN item_category p ON i.parentid = p.CategoryID
+      WHERE i.CategoryID = ? AND i.UserIDInserted = ?
+    `;
 
-    if (data.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found or not accessible.",
-      });
-    }
+    db.pool.query(sql, [categoryId, creatorId], (err, data) => {
+      if (err) {
+        console.error("Database query error:", err);
+        return res
+          .status(500)
+          .json({ success: false, message: "Internal Server Error" });
+      }
 
-    const category = data[0];
-    category.parent_name =
-      category.parentid === 0 ? "No Parent" : category.parent_name;
+      if (data.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "Category not found or not accessible.",
+        });
+      }
 
-    return res.status(200).json({ success: true, data: category });
+      const category = data[0];
+      category.parent_name =
+        category.parentid === 0 ? "No Parent" : category.parent_name;
+
+      return res.status(200).json({ success: true, data: category });
+    });
   });
 };
 module.exports = {

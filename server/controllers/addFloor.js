@@ -227,66 +227,47 @@ const syncFloors = async (req, res) => {
 const updateFloor = async (req, res) => {
   try {
     const { id } = req.params;
-    const { floorName, created_by } = req.body;
+    const { floorName } = req.body;
+    const userId = req.id;
 
-    // Step 1: Fetch the current floor data
-    const fetchCurrentDataSql =
-      "SELECT * FROM tbl_tablefloor WHERE tbfloorid = ?";
-    db.pool.query(fetchCurrentDataSql, [id], (fetchErr, fetchData) => {
-      if (fetchErr) {
-        console.error("Database fetch error:", fetchErr);
-        return res.status(500).json({ error: "Internal Server Error" });
-      }
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by: userCreatedBy } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : userCreatedBy;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-      if (fetchData.length === 0) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Floor record not found" });
-      }
-
-      const currentData = fetchData[0];
-
-      // Step 2: Prepare the updated data
-      const updatedData = {
-        floorName: floorName !== undefined ? floorName : currentData.floorName,
-        created_by:
-          created_by !== undefined ? created_by : currentData.created_by,
-      };
-
-      // Step 3: Update the floor record
-      const updateFloorQuery = `
-        UPDATE tbl_tablefloor
-        SET floorName = ?, created_by = ?
-        WHERE tbfloorid = ?
-      `;
-      db.pool.query(
-        updateFloorQuery,
-        [updatedData.floorName, updatedData.created_by, id],
-        (updateErr, result) => {
+      const fetchCurrentDataSql = "SELECT * FROM tbl_tablefloor WHERE tbfloorid = ? AND created_by = ?";
+      db.pool.query(fetchCurrentDataSql, [id, creatorId], (fetchErr, fetchData) => {
+        if (fetchErr) {
+          console.error("Database fetch error:", fetchErr);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+        if (fetchData.length === 0) {
+          return res.status(404).json({ success: false, message: "Floor record not found" });
+        }
+        const currentData = fetchData[0];
+        const updatedData = {
+          floorName: floorName !== undefined ? floorName : currentData.floorName,
+          created_by: currentData.created_by,
+        };
+        const updateFloorQuery = `UPDATE tbl_tablefloor SET floorName = ?, created_by = ? WHERE tbfloorid = ?`;
+        db.pool.query(updateFloorQuery, [updatedData.floorName, updatedData.created_by, id], (updateErr, result) => {
           if (updateErr) {
             console.error("Database update error:", updateErr);
-            return res
-              .status(500)
-              .json({ success: false, message: "An error occurred" });
+            return res.status(500).json({ success: false, message: "An error occurred" });
           }
-
           if (result.affectedRows === 0) {
-            return res
-              .status(404)
-              .json({ success: false, message: "Floor record not found" });
+            return res.status(404).json({ success: false, message: "Floor record not found" });
           }
-
-          return res
-            .status(200)
-            .json({ success: true, message: "Floor updated successfully" });
-        },
-      );
+          return res.status(200).json({ success: true, message: "Floor updated successfully" });
+        });
+      });
     });
   } catch (error) {
     console.error("Update floor error:", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "An error occurred" });
+    return res.status(500).json({ success: false, message: "An error occurred" });
   }
 };
 
@@ -296,31 +277,28 @@ const getFloorById = async (req, res) => {
     const { id } = req.params;
 
     if (!id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Floor ID is required" });
+      return res.status(400).json({ success: false, message: "Floor ID is required" });
     }
 
-    const getFloorByIdQuery = `SELECT * FROM tbl_tablefloor WHERE 	tbfloorid  = ?`;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    db.pool.query(getFloorByIdQuery, [id], (err, result) => {
-      if (err) {
-        console.log(err);
-        return res
-          .status(500)
-          .json({ success: false, message: "An error occurred" });
-      }
-
-      if (result.length === 0) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Floor not found" });
-      }
-
-      res.status(200).json({
-        success: true,
-        data: result[0],
-        message: "Floor fetched successfully",
+      const getFloorByIdQuery = `SELECT * FROM tbl_tablefloor WHERE tbfloorid = ? AND created_by = ?`;
+      db.pool.query(getFloorByIdQuery, [id, creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).json({ success: false, message: "An error occurred" });
+        }
+        if (result.length === 0) {
+          return res.status(404).json({ success: false, message: "Floor not found" });
+        }
+        res.status(200).json({ success: true, data: result[0], message: "Floor fetched successfully" });
       });
     });
   } catch (error) {
@@ -332,22 +310,26 @@ const getFloorById = async (req, res) => {
 const deleteFloor = async (req, res) => {
   try {
     const { floorID } = req.params;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    const deleteFloorQuery = `DELETE FROM tbl_tablefloor WHERE tbfloorid  = ?`;
-    db.pool.query(deleteFloorQuery, [floorID], (err, result) => {
-      if (err) {
-        console.log(err);
-        res.status(500).json({
-          success: false,
-          message: "An error occurred while deleting the floor",
-        });
-      } else if (result.affectedRows === 0) {
-        res.status(404).json({ success: false, message: "Floor not found" });
-      } else {
-        res
-          .status(200)
-          .json({ success: true, message: "Floor deleted successfully" });
-      }
+      const deleteFloorQuery = `DELETE FROM tbl_tablefloor WHERE tbfloorid = ? AND created_by = ?`;
+      db.pool.query(deleteFloorQuery, [floorID, creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).json({ success: false, message: "An error occurred while deleting the floor" });
+        } else if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Floor not found" });
+        } else {
+          return res.status(200).json({ success: true, message: "Floor deleted successfully" });
+        }
+      });
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "An error occurred" });

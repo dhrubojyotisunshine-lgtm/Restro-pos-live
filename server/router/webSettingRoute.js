@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const router = express.Router();
+const auth = require("../middleware/authicantejwt");
 
 const webSettingController = require("../controllers/webSetting");
 
@@ -21,9 +22,10 @@ const upload = multer({
   storage: multerStorage,
   limits: { fileSize: 1024 * 1024 * 5 },
 });
-// common setting routs
+
 router.post(
   "/csetting",
+  auth,
   upload.fields([
     { name: "logo", maxCount: 1 },
     { name: "logo_footer", maxCount: 1 },
@@ -32,21 +34,19 @@ router.post(
   webSettingController.createSetting
 );
 
-router.put('/csetting/:id', upload.fields([
-    { name: 'logo', maxCount: 1 },
-    { name: 'logo_footer', maxCount: 1 },
-    { name: 'fevicon', maxCount: 1 },
+router.put("/csetting/:id", auth, upload.fields([
+    { name: "logo", maxCount: 1 },
+    { name: "logo_footer", maxCount: 1 },
+    { name: "fevicon", maxCount: 1 },
   ]), webSettingController.updateSetting);
-  
+
 router.get("/websetting", webSettingController.getAllSettings);
-router.get('/csetting/:id', webSettingController.getSettingById);
-// sound setting 
+router.get("/csetting/:id", auth, webSettingController.getSettingById);
 
-router.post('/createsound', upload.single('notifysound'), webSettingController.createOrUpdateSoundSetting);
-router.get('/soundsetting',webSettingController.getAllSoundSettings);
-// ueser subscription 
-router.get('/subscriptions/:id', webSettingController.getSubscriptionsByAdmin);
+router.post("/createsound", auth, upload.single("notifysound"), webSettingController.createOrUpdateSoundSetting);
+router.get("/soundsetting", auth, webSettingController.getAllSoundSettings);
 
-router.post('/createsubscription', webSettingController.createSubscriptionByAdmin);
+router.get("/subscriptions/:id", auth, webSettingController.getSubscriptionsByAdmin);
+router.post("/createsubscription", auth, webSettingController.createSubscriptionByAdmin);
 
 module.exports = router;

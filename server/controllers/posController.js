@@ -5,7 +5,7 @@ const { ThermalPrinter, types: PrinterTypes } = require("node-thermal-printer");
 
 const getCategoryList = async (req, res) => {
   try {
-    const userId = req.id ;
+    const userId = req.id  || 79;
 
     // Step 1: Get is_admin and created_by for the logged-in user
     const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
@@ -196,12 +196,15 @@ const getProductsByCategory = async (req, res) => {
       // Fetch variants and add-ons
       const productsWithDetails = await Promise.all(
         products.map(async (product) => {
-          // Variants
+          // Variants — join through item_foods to enforce company isolation
           const variants = await new Promise((resolve, reject) => {
-            const queryVariants = `SELECT v.* FROM variant v WHERE v.menuid = ?;`;
+            const queryVariants = `
+              SELECT v.* FROM variant v
+              INNER JOIN item_foods f ON v.menuid = f.ProductsID
+              WHERE v.menuid = ? AND f.UserIDInserted = ?;`;
             db.pool.query(
               queryVariants,
-              [product.ProductsID],
+              [product.ProductsID, creatorId],
               (err, results) => {
                 if (err) return reject(err);
                 resolve(results || []);
@@ -209,15 +212,15 @@ const getProductsByCategory = async (req, res) => {
             );
           });
 
-          // Add-ons
+          // Add-ons — filter by created_by to enforce company isolation
           const addons = await new Promise((resolve, reject) => {
             const queryAddons = `
-            SELECT a.*
-            FROM menu_add_on ma
-            LEFT JOIN add_ons a ON ma.add_on_id = a.add_on_id
-            WHERE ma.is_active = 1 AND ma.menu_id = ?;
-          `;
-            db.pool.query(queryAddons, [product.ProductsID], (err, results) => {
+              SELECT a.*
+              FROM menu_add_on ma
+              LEFT JOIN add_ons a ON ma.add_on_id = a.add_on_id
+              WHERE ma.is_active = 1 AND ma.menu_id = ? AND a.created_by = ?;
+            `;
+            db.pool.query(queryAddons, [product.ProductsID, creatorId], (err, results) => {
               if (err) return reject(err);
               resolve(results || []);
             });
@@ -248,7 +251,627 @@ const runQuery = (sql, params = []) => {
   });
 };
 
+const orderPlace_electron = (req, res) => {
+  const {
+    customer_id,
+    customer_type,
+    waiter_id,
+    order_details,
+    grand_total,
+    VAT = 0,
+    discount = 0,
+    table_id = 0,
+    persons = 0,
+    print_kot = true,
+  } = req.body;
+
+  const created_by = req.id || 1;
+
+  if (
+    !customer_id ||
+    !Array.isArray(order_details) ||
+    order_details.length === 0 ||
+    !grand_total
+  ) {
+    console.log("❌ Validation failed");
+    return res.status(400).json({ message: "Invalid request data" });
+  }
+
+  db.get(
+    "SELECT MAX(order_id) AS maxOrderId FROM customer_order",
+    (err, result) => {
+      if (err) return res.status(500).json({ message: "DB error" });
+
+      const invoiceId = result?.maxOrderId ? result.maxOrderId + 1 : 1;
+      console.log("🧾 Generated invoiceId:", invoiceId);
+
+      db.get(
+        `SELECT tokenno FROM customer_order
+         WHERE order_date = DATE('now') AND tokenno IS NOT NULL
+         ORDER BY order_id DESC LIMIT 1`,
+        (err, tokenRow) => {
+          let tokenNo = "T1";
+          if (tokenRow?.tokenno) {
+            const num = parseInt(tokenRow.tokenno.replace("T", ""), 10);
+            tokenNo = `T${num + 1}`;
+          }
+
+          console.log("🎫 Generated token:", tokenNo);
+
+          const orderQuery = `
+            INSERT INTO customer_order (
+              saleinvoice, customer_id, cutomertype, waiter_id,
+              order_date, order_time, table_no,
+              tokenno, totalamount,
+              order_status, orderacceptreject, splitpay_status, created_by
+            )
+            VALUES (?, ?, ?, ?, DATE('now'), TIME('now'), ?, ?, ?, 2, 1, 0, ?)
+          `;
+
+          db.run(
+            orderQuery,
+            [
+              invoiceId,
+              customer_id,
+              customer_type,
+              waiter_id || 0,
+              table_id,
+              tokenNo,
+              grand_total,
+              created_by,
+            ],
+            function (err) {
+              if (err) return res.status(500).json({ message: err.message });
+
+              const orderId = this.lastID;
+              console.log("✅ Order created, orderId:", orderId);
+
+              // 👉 ADD HERE
+              if (table_id && persons > 0) {
+                db.get(
+                  `SELECT person_capicity, occupied_seats 
+     FROM rest_table 
+     WHERE tableid = ?`,
+                  [table_id],
+                  (err, table) => {
+                    if (err || !table) {
+                      console.error("Table not found");
+                      return;
+                    }
+
+                    const available =
+                      table.person_capicity - table.occupied_seats;
+
+                    if (persons > available) {
+                      console.log("❌ Not enough seats");
+                      return;
+                    }
+
+                    const newOccupied = table.occupied_seats + persons;
+
+                    db.run(
+                      `UPDATE rest_table 
+   SET occupied_seats = ?, 
+       status = CASE 
+         WHEN ? = 0 THEN 'free'
+         WHEN ? < person_capicity THEN 'partial'
+         ELSE 'booked'
+       END
+   WHERE tableid = ?`,
+                      [newOccupied, newOccupied, newOccupied, table_id],
+                      (err) => {
+                        if (err)
+                          console.error("Seat update failed:", err.message);
+                        else console.log("✅ Seats updated:", newOccupied);
+                      },
+                    );
+                  },
+                );
+              }
+
+              const orderMenuRows = [];
+              const kotItems = {};
+              const usedKitchens = new Set();
+              let completed = 0;
+
+              order_details.forEach((detail) => {
+                console.log("🍽 Processing item:", detail);
+
+                db.get(
+                  "SELECT ProductName, kitchenid FROM item_foods WHERE ProductsID = ?",
+                  [detail.ProductsID],
+                  (err, food) => {
+                    if (err) {
+                      console.error("DB error:", err);
+                      return res.status(500).json({ message: err.message });
+                    }
+
+                    console.log("📦 Food from DB:", food);
+
+                    if (!food) {
+                      return res.status(400).json({
+                        message: `Food not found ${detail.ProductsID}`,
+                      });
+                    }
+
+                    const kitchenId = Number(food.kitchenid);
+
+                    console.log("🏠 kitchenId resolved:", kitchenId);
+
+                    if (!kitchenId || isNaN(kitchenId)) {
+                      console.error("❌ Invalid kitchen for product:", food);
+                      return res.status(400).json({
+                        message: `Kitchen not assigned to product: ${food.ProductName}`,
+                      });
+                    }
+
+                    usedKitchens.add(kitchenId);
+
+                    orderMenuRows.push([
+                      orderId,
+                      detail.ProductsID,
+                      detail.price,
+                      detail.quantity,
+                      "",
+                      "",
+                      detail.variantid || 0,
+                      kitchenId,
+                      0,
+                      0,
+                      0,
+                    ]);
+
+                    let itemName = food.ProductName;
+                    if (detail.addons?.length) {
+                      const addons = detail.addons
+                        .map((a) => a.add_on_name)
+                        .join(", ");
+                      itemName += ` (Addons: ${addons})`;
+                    }
+
+                    if (!kotItems[kitchenId]) kotItems[kitchenId] = [];
+                    kotItems[kitchenId].push({
+                      name: itemName,
+                      qty: detail.quantity,
+                    });
+
+                    completed++;
+                    if (completed === order_details.length) {
+                      finalize().catch((err) => {
+                        console.error("❌ Finalize failed:", err.message);
+                        return res.status(500).json({
+                          success: false,
+                          message: err.message,
+                        });
+                      });
+                    }
+                  },
+                );
+              });
+
+              async function finalize() {
+                console.log("📥 orderMenuRows:", orderMenuRows);
+                console.log("📥 kotItems:", kotItems);
+
+                const placeholders = orderMenuRows
+                  .map(() => `(?,?,?,?,?,?,?,?,?,?,?)`)
+                  .join(",");
+
+                await new Promise((resolve, reject) => {
+                  db.run(
+                    `INSERT INTO order_menu (
+        order_id, menu_id, price, menuqty,
+        add_on_id, addonsqty, varientid,
+        kitchen_id, food_status, allfoodready, kot_status
+      ) VALUES ${placeholders}`,
+                    orderMenuRows.flat(),
+                    (err) => {
+                      if (err) return reject(err);
+                      resolve();
+                    },
+                  );
+                });
+
+                // Split Pay needs a sub_order row per line item (same shape
+                // holdOrders.js already creates for drafts), tagged
+                // source_type='normal' so origin stays distinguishable.
+                
+                const subOrderRows = order_details.map((detail) => [
+                  orderId,
+                  customer_id,
+                  VAT,
+                  discount,
+                  detail.ProductsID,
+                  detail.price,
+                  detail.quantity,
+                  "",
+                  "",
+                  0,
+                  detail.variantid || 0,
+                  "normal",
+                ]);
+
+                const subOrderPlaceholders = subOrderRows
+                  .map(() => `(?,?,?,?,?,?,?,?,?,?,?,?)`)
+                  .join(",");
+
+                await new Promise((resolve, reject) => {
+                  db.run(
+                    `INSERT INTO sub_order (
+        order_id, customer_id, vat, discount, order_menu_id,
+        total_price, menu_qty, adons_id, adons_qty, status, varient_id,
+        source_type
+      ) VALUES ${subOrderPlaceholders}`,
+                    subOrderRows.flat(),
+                    (err) => {
+                      if (err) return reject(err);
+                      resolve();
+                    },
+                  );
+                });
+
+                // paymentSplitOrder requires a bill row to exist (same
+                // pattern already used by holdOrders.js/webUser.js); orderPlace()
+                // never created one, which blocked Split Pay for every normal order.
+                const update_by = created_by;
+                const update_date = new Date().toISOString().split("T")[0];
+                const service_charge = 0;
+                const total_amount =
+                  grand_total -
+                  service_charge -
+                  (VAT || 0) -
+                  (discount || 0);
+
+                await new Promise((resolve, reject) => {
+                  db.run(
+                    `INSERT INTO bill (
+        customer_id, create_by, update_by, update_date, order_id,
+        total_amount, discount, service_charge, shipping_type, VAT,
+        bill_amount, bill_date, bill_time, create_at,
+        bill_status, payment_method_id, create_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, DATE('now'), TIME('now'), DATE('now'), 0, 0, DATE('now'))`,
+                    [
+                      customer_id,
+                      created_by,
+                      update_by,
+                      update_date,
+                      orderId,
+                      total_amount,
+                      discount || 0,
+                      service_charge,
+                      null,
+                      VAT || 0,
+                      grand_total,
+                    ],
+                    (err) => {
+                      if (err) return reject(err);
+                      resolve();
+                    },
+                  );
+                });
+
+                for (const kitchenId in kotItems) {
+                  for (const item of kotItems[kitchenId]) {
+                    await new Promise((resolve, reject) => {
+                      db.run(
+                        `INSERT INTO kot_items(order_id, kitchen_id, item_name, qty, printed)
+           VALUES (?, ?, ?, ?, ?)`,
+                        [
+                          orderId,
+                          kitchenId,
+                          item.name,
+                          item.qty,
+                          print_kot ? 0 : 1,
+                        ],
+                        (err) => {
+                          if (err) return reject(err);
+                          resolve();
+                        },
+                      );
+                    });
+                  }
+                }
+
+                if (print_kot) {
+                  for (const kitchenId of usedKitchens) {
+                    await printKOTForKitchen(kitchenId, orderId);
+                  }
+                }
+
+                return res.json({
+                  success: true,
+                  message: "Order placed successfully",
+                  kitchens: [...usedKitchens],
+                });
+              }
+            },
+          );
+        },
+      );
+    },
+  );
+};
 const orderPlace = async (req, res) => {
+  try {
+    const {
+      customer_id,
+      customer_type,
+      waiter_id,
+      order_details,
+      grand_total,
+      table_id,
+      persons = 0,
+    } = req.body;
+
+    const create_by = req.id;
+
+    // 🔹 VALIDATION
+    if (
+      !customer_id ||
+      !Array.isArray(order_details) ||
+      order_details.length === 0 ||
+      !grand_total
+    ) {
+      return res.status(400).json({ message: "Invalid request data" });
+    }
+
+    const waiterId = waiter_id || 0;
+    const tableId = table_id || 0;
+
+    // 🔥 STEP 1: GET LAST ORDER ID (for invoice) — per company
+    const lastOrder = await runQuery(
+      "SELECT MAX(CAST(saleinvoice AS UNSIGNED)) AS maxInvoice FROM customer_order WHERE created_by = ?",
+      [create_by]
+    );
+
+    const invoiceId = lastOrder[0].maxInvoice ? parseInt(lastOrder[0].maxInvoice) + 1 : 1;
+
+    // 🔥 STEP 2: TOKEN GENERATION — per company per day
+    const lastToken = await runQuery(
+      `SELECT tokenno
+       FROM customer_order
+       WHERE order_date = CURDATE() AND created_by = ?
+       ORDER BY order_id DESC
+       LIMIT 1`,
+      [create_by]
+    );
+
+    let tokenNo = "T1";
+    if (lastToken.length > 0 && lastToken[0].tokenno) {
+      const num = parseInt(lastToken[0].tokenno.replace("T", ""), 10);
+      tokenNo = `T${num + 1}`;
+    }
+
+    // 🔥 STEP 3: INSERT ORDER
+    const orderInsert = await runQuery(
+      `INSERT INTO customer_order (
+        saleinvoice,
+        customer_id,
+        cutomertype,
+        waiter_id,
+        order_date,
+        order_time,
+        table_no,
+        tokenno,
+        totalamount,
+        order_status,
+        orderacceptreject,
+        splitpay_status,
+        created_by
+      )
+      VALUES (?, ?, ?, ?, CURDATE(), CURTIME(), ?, ?, ?, 2, 1, 0, ?)`,
+      [
+        invoiceId,
+        customer_id,
+        customer_type,
+        waiterId,
+        tableId,
+        tokenNo,
+        grand_total,
+        create_by,
+      ]
+    );
+
+    const orderId = orderInsert.insertId;
+
+    // 🔥 STEP 4: TABLE UPDATE (SAFE)
+    if (tableId && persons > 0) {
+      const table = await runQuery(
+        `SELECT person_capicity, occupied_seats 
+         FROM rest_table 
+         WHERE tableid = ?`,
+        [tableId]
+      );
+
+      if (!table.length) throw new Error("Table not found");
+
+      const available = table[0].person_capicity - table[0].occupied_seats;
+
+      if (persons > available) {
+        throw new Error("Not enough seats available");
+      }
+
+      await runQuery(
+        `UPDATE rest_table 
+         SET occupied_seats = occupied_seats + ? 
+         WHERE tableid = ?`,
+        [persons, tableId]
+      );
+    }
+
+    // 🔥 STEP 5: BILL INSERT (FIXED — IMPORTANT)
+    await runQuery(
+      `INSERT INTO bill (
+        order_id,
+        customer_id,
+        total_amount,
+        bill_amount,
+        discount,
+        service_charge,
+        payment_method_id,
+        bill_date,
+        bill_time,
+        bill_status,
+        create_by,
+        create_date,
+        update_by,
+        update_date
+      )
+      VALUES (?, ?, ?, ?, 0, 0, 1, CURDATE(), CURTIME(), 0, ?, CURDATE(), ?, CURDATE())`,
+      [
+        orderId,
+        customer_id,
+        grand_total,
+        grand_total,
+        create_by,
+        create_by,
+      ]
+    );
+
+    // 🔥 STEP 6: PROCESS ORDER ITEMS (OPTIMIZED)
+    const orderMenuRows = [];
+    const kotItems = {};
+    const usedKitchens = new Set();
+
+    for (const detail of order_details) {
+      const food = await runQuery(
+        `SELECT ProductName, kitchenid 
+         FROM item_foods 
+         WHERE ProductsID = ?`,
+        [detail.ProductsID]
+      );
+
+      if (!food.length) {
+        throw new Error(`Product not found: ${detail.ProductsID}`);
+      }
+
+      const kitchenId = Number(food[0].kitchenid);
+
+      if (!kitchenId) {
+        throw new Error(`Kitchen not assigned for product ${detail.ProductsID}`);
+      }
+
+      usedKitchens.add(kitchenId);
+
+      orderMenuRows.push([
+        orderId,
+        detail.ProductsID,
+        detail.price,
+        detail.quantity,
+        "",
+        "",
+        detail.variantid || 0,
+        kitchenId,
+        0,
+        0,
+        0,
+      ]);
+
+      let kotName = food[0].ProductName;
+
+      if (detail.addons?.length) {
+        kotName += ` (Addons: ${detail.addons.map(a => a.add_on_name).join(", ")})`;
+      }
+
+      if (!kotItems[kitchenId]) kotItems[kitchenId] = [];
+      kotItems[kitchenId].push({
+        name: kotName,
+        qty: detail.quantity,
+      });
+    }
+
+    // 🔥 STEP 7: INSERT ORDER MENU (BULK)
+    await runQuery(
+      `INSERT INTO order_menu (
+        order_id,
+        menu_id,
+        price,
+        menuqty,
+        add_on_id,
+        addonsqty,
+        varientid,
+        kitchen_id,
+        food_status,
+        allfoodready,
+        kot_status
+      ) VALUES ?`,
+      [orderMenuRows]
+    );
+    
+    // ADD THIS NEW BLOCK HERE after 7
+    const subOrderRows = order_details.map((detail) => [
+      orderId,
+      customer_id,
+      0,
+      0,
+      detail.ProductsID,
+      detail.price,
+      detail.quantity,
+      "",
+      "",
+      0,
+      detail.variantid || 0,
+      "normal",
+    ]);
+    
+    await runQuery(
+      `INSERT INTO sub_order (
+        order_id, customer_id, vat, discount, order_menu_id,
+        total_price, menu_qty, adons_id, adons_qty, status, varient_id,
+        source_type
+      ) VALUES ?`,
+      [subOrderRows]
+    );
+
+    // 🔥 STEP 8: KOT ITEMS
+    for (const kitchenId in kotItems) {
+      for (const item of kotItems[kitchenId]) {
+        await runQuery(
+          `INSERT INTO kot_items (
+            order_id,
+            kitchen_id,
+            item_name,
+            qty,
+            printed
+          ) VALUES (?, ?, ?, ?, 0)`,
+          [orderId, kitchenId, item.name, item.qty]
+        );
+      }
+    }
+
+    // 🔥 STEP 9: PRINTER CHECK (WARNING ONLY)
+    const missingPrinters = [];
+
+    for (const kitchenId of usedKitchens) {
+      const printer = await runQuery(
+        `SELECT id FROM printer_list WHERE kitchen_id = ?`,
+        [kitchenId]
+      );
+
+      if (!printer.length) missingPrinters.push(kitchenId);
+    }
+
+    // 🔥 FINAL RESPONSE
+    return res.status(200).json({
+      success: true,
+      message: "Order placed successfully",
+      orderId,
+      invoiceId,
+      tokenNo,
+      warning:
+        missingPrinters.length
+          ? `Printer not configured for kitchens: ${missingPrinters.join(", ")}`
+          : null,
+    });
+
+  } catch (error) {
+    console.error("ORDER ERROR:", error);
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+const orderPlace_customererrorless = async (req, res) => {
   try {
     const {
       customer_id,
@@ -275,25 +898,304 @@ const orderPlace = async (req, res) => {
     const waiterId = waiter_id || 0;
     const tableId = table_id || 0;
 
-    // 🔹 GENERATE INVOICE ID
+    // 🔹 GENERATE INVOICE ID — per company
     const maxOrderIdResult = await runQuery(
-      "SELECT MAX(order_id) AS maxOrderId FROM customer_order",
+      "SELECT MAX(CAST(saleinvoice AS UNSIGNED)) AS maxOrderId FROM customer_order WHERE created_by = ?",
+      [create_by]
     );
 
     const invoiceId = maxOrderIdResult[0].maxOrderId
-      ? maxOrderIdResult[0].maxOrderId + 1
+      ? parseInt(maxOrderIdResult[0].maxOrderId) + 1
       : 1;
 
-    // 🔹 AUTO-GENERATE TOKEN (DAY-WISE)
+    // 🔹 AUTO-GENERATE TOKEN (DAY-WISE) — per company
     const lastTokenResult = await runQuery(
       `
       SELECT tokenno
       FROM customer_order
       WHERE order_date = CURDATE()
         AND tokenno IS NOT NULL
+        AND created_by = ?
       ORDER BY order_id DESC
       LIMIT 1
       `,
+      [create_by]
+    );
+
+    let tokenNo = "T1";
+
+    if (lastTokenResult.length > 0) {
+      const lastToken = lastTokenResult[0].tokenno; // e.g. T12
+      const num = parseInt(lastToken.replace("T", ""), 10);
+      tokenNo = `T${num + 1}`;
+    }
+
+    // 🔹 INSERT ORDER (TOKEN INCLUDED)
+    const orderInsertResult = await runQuery(
+      `
+      INSERT INTO customer_order (
+        saleinvoice,
+        customer_id,
+        cutomertype,
+        waiter_id,
+        order_date,
+        order_time,
+        table_no,
+        tokenno,
+        totalamount,
+        order_status,
+        orderacceptreject,
+        splitpay_status,
+        created_by
+      )
+      VALUES (?, ?, ?, ?, CURDATE(), CURTIME(), ?, ?, ?, 2, 1, 0, ?)
+      `,
+      [
+        invoiceId,
+        customer_id,
+        customer_type,
+        waiterId,
+        tableId,
+        tokenNo,
+        grand_total,
+        create_by,
+      ],
+    );
+
+    const orderId = orderInsertResult.insertId;
+
+    // ✅ UPDATE OCCUPIED SEATS (MYSQL)
+    if (tableId && persons > 0) {
+      const tableResult = await runQuery(
+        `SELECT person_capicity, occupied_seats 
+     FROM rest_table 
+     WHERE tableid = ?`,
+        [tableId],
+      );
+
+      if (tableResult.length === 0) {
+        throw new Error("Table not found");
+      }
+
+      const table = tableResult[0];
+      const available = table.person_capicity - table.occupied_seats;
+
+      if (persons > available) {
+        throw new Error("Not enough seats available");
+      }
+
+      const newOccupied = table.occupied_seats + persons;
+
+      await runQuery(
+        `
+    UPDATE rest_table
+    SET occupied_seats = ?
+    WHERE tableid = ?
+    `,
+        [newOccupied, tableId],
+      );
+    }
+
+    await runQuery(
+      `
+  INSERT INTO bill (
+    order_id,
+    customer_id,
+    bill_status,
+    bill_amount,
+    discount,
+    service_charge,
+    payment_method_id,
+    bill_date,
+    bill_time
+  )
+  VALUES (?, ?, 0, 0, 0, 0, 1, CURDATE(), CURTIME())
+  `,
+      [orderId, customer_id],
+    );
+
+    // 🔹 DATA HOLDERS
+    const orderMenuRows = [];
+    const kotItems = {};
+    const usedKitchens = new Set();
+
+    // 🔹 LOOP ITEMS
+    for (const detail of order_details) {
+      // 🔥 FETCH PRODUCT + KITCHEN
+      const foodResult = await runQuery(
+        "SELECT ProductName, kitchenid FROM item_foods WHERE ProductsID = ?",
+        [detail.ProductsID],
+      );
+
+      if (foodResult.length === 0) {
+        throw new Error(`Food item not found: ${detail.ProductsID}`);
+      }
+
+      const kitchenId = Number(foodResult[0].kitchenid);
+
+      console.log("Kitchen ID:", kitchenId);
+
+      if (!kitchenId || kitchenId === 0) {
+        throw new Error(
+          `Kitchen not assigned to this item (Product ID ${detail.ProductsID})`,
+        );
+      }
+
+      usedKitchens.add(kitchenId);
+
+      // 🔹 ORDER MENU
+      orderMenuRows.push([
+        orderId,
+        detail.ProductsID,
+        detail.price,
+        detail.quantity,
+        "",
+        "",
+        detail.variantid || 0,
+        kitchenId,
+        0,
+        0,
+        0,
+      ]);
+
+      // 🔹 KOT ITEM NAME (WITH ADDONS)
+      let kotItemName = foodResult[0].ProductName;
+
+      if (detail.addons && detail.addons.length > 0) {
+        const addonNames = detail.addons.map((a) => a.add_on_name).join(", ");
+        kotItemName = `${kotItemName} (Addons: ${addonNames})`;
+      }
+
+      if (!kotItems[kitchenId]) kotItems[kitchenId] = [];
+      kotItems[kitchenId].push({
+        name: kotItemName,
+        qty: detail.quantity,
+      });
+    }
+
+    // 🔹 INSERT ORDER MENU
+    await runQuery(
+      `
+      INSERT INTO order_menu (
+        order_id,
+        menu_id,
+        price,
+        menuqty,
+        add_on_id,
+        addonsqty,
+        varientid,
+        kitchen_id,
+        food_status,
+        allfoodready,
+        kot_status
+      ) VALUES ?
+      `,
+      [orderMenuRows],
+    );
+
+    // 🔹 INSERT KOT ITEMS
+    for (const kitchenId in kotItems) {
+      for (const item of kotItems[kitchenId]) {
+        await runQuery(
+          `
+          INSERT INTO kot_items (
+            order_id,
+            kitchen_id,
+            item_name,
+            qty,
+            printed
+          ) VALUES (?, ?, ?, ?, 0)
+          `,
+          [orderId, kitchenId, item.name, item.qty],
+        );
+      }
+    }
+
+    // 🔹 PRINTER CONFIG CHECK (ONLY WARNING)
+    const missingPrinters = [];
+
+    for (const kitchenId of usedKitchens) {
+      const printerCheck = await runQuery(
+        "SELECT id FROM printer_list WHERE kitchen_id = ?",
+        [kitchenId],
+      );
+
+      if (printerCheck.length === 0) {
+        missingPrinters.push(kitchenId);
+      }
+    }
+
+    // 🔹 FINAL RESPONSE
+    return res.status(200).json({
+      success: true,
+      message: "Order placed successfully (KOT enabled)",
+      orderId,
+      invoiceId,
+      tokenNo, // 👈 FRONTEND CAN SHOW TOKEN
+      kitchens: [...usedKitchens],
+      warning:
+        missingPrinters.length > 0
+          ? `Printer not configured for kitchen(s): ${missingPrinters.join(
+              ", ",
+            )}`
+          : null,
+    });
+  } catch (error) {
+    console.error("❌ Order Place Error:", error.message);
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+const orderPlace123 = async (req, res) => {
+  try {
+    const {
+      customer_id,
+      customer_type,
+      waiter_id,
+      order_details,
+      grand_total,
+      table_id,
+      persons = 0,
+    } = req.body;
+
+    const create_by = req.id;
+
+    // 🔹 BASIC VALIDATION
+    if (
+      !customer_id ||
+      !Array.isArray(order_details) ||
+      order_details.length === 0 ||
+      !grand_total
+    ) {
+      return res.status(400).json({ message: "Invalid request data" });
+    }
+
+    const waiterId = waiter_id || 0;
+    const tableId = table_id || 0;
+
+    // 🔹 GENERATE INVOICE ID — per company
+    const maxOrderIdResult = await runQuery(
+      "SELECT MAX(CAST(saleinvoice AS UNSIGNED)) AS maxOrderId FROM customer_order WHERE created_by = ?",
+      [create_by]
+    );
+
+    const invoiceId = maxOrderIdResult[0].maxOrderId
+      ? parseInt(maxOrderIdResult[0].maxOrderId) + 1
+      : 1;
+
+    // 🔹 AUTO-GENERATE TOKEN (DAY-WISE) — per company
+    const lastTokenResult = await runQuery(
+      `
+      SELECT tokenno
+      FROM customer_order
+      WHERE order_date = CURDATE()
+        AND tokenno IS NOT NULL
+        AND created_by = ?
+      ORDER BY order_id DESC
+      LIMIT 1
+      `,
+      [create_by]
     );
 
     let tokenNo = "T1";
@@ -883,51 +1785,64 @@ const getQROrders = async (req, res) => {
 // allOrderList
 const allOrderList = async (req, res) => {
   try {
-    const getAllOrderList = `
-     SELECT
-      co.*,
-      c.customer_name,
-      w.firstname AS waiter_first_name,
-      w.lastname AS waiter_last_name,
-      rt.tablename,
-      b.discount,
-      b.service_charge,
-      b.shipping_type,
-      b.VAT,
-      b.bill_amount,
-      b.bill_date,
-        b.bill_time,
-      b.bill_status,
-      b.payment_method_id,
-      sm.shipping_method AS shipping_method_name
-      FROM
-      customer_order co
-      LEFT JOIN
-      customer_info c ON co.customer_id = c.customer_id
-      LEFT JOIN
-      user w ON co.waiter_id = w.id
-        LEFT JOIN
-        rest_table rt ON co.table_no = rt.tableid
-      LEFT JOIN
-      bill b ON co.order_id = b.order_id
-      LEFT JOIN
-      shipping_method sm ON b.shipping_type = sm.ship_id
-      ORDER BY
-      co.order_id DESC;
-
-    `;
-
-    db.pool.query(getAllOrderList, (err, result) => {
-      if (err) {
-        console.log(err);
-        res.status(500).json({ success: false, message: "An error occurred" });
-      } else {
-        res.status(200).json({
-          success: true,
-          data: result,
-          message: "All Orders fetched successfully",
-        });
+    const userId = req.id;
+    const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(checkUserQuery, [userId], (userErr, userData) => {
+      if (userErr || !userData.length) {
+        return res.status(500).json({ success: false, message: "An error occurred" });
       }
+      const { is_admin, created_by } = userData[0];
+      if (!is_admin && !created_by) {
+        return res.status(403).json({ success: false, message: "You are not authorized to view orders." });
+      }
+      const creatorId = is_admin === 1 ? userId : created_by;
+
+      const getAllOrderList = `
+       SELECT
+        co.*,
+        c.customer_name,
+        w.firstname AS waiter_first_name,
+        w.lastname AS waiter_last_name,
+        rt.tablename,
+        b.discount,
+        b.service_charge,
+        b.shipping_type,
+        b.VAT,
+        b.bill_amount,
+        b.bill_date,
+          b.bill_time,
+        b.bill_status,
+        b.payment_method_id,
+        sm.shipping_method AS shipping_method_name
+        FROM
+        customer_order co
+        LEFT JOIN
+        customer_info c ON co.customer_id = c.customer_id
+        LEFT JOIN
+        user w ON co.waiter_id = w.id
+          LEFT JOIN
+          rest_table rt ON co.table_no = rt.tableid
+        LEFT JOIN
+        bill b ON co.order_id = b.order_id
+        LEFT JOIN
+        shipping_method sm ON b.shipping_type = sm.ship_id
+        WHERE co.created_by = ?
+        ORDER BY
+        co.order_id DESC;
+      `;
+
+      db.pool.query(getAllOrderList, [creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          res.status(500).json({ success: false, message: "An error occurred" });
+        } else {
+          res.status(200).json({
+            success: true,
+            data: result,
+            message: "All Orders fetched successfully",
+          });
+        }
+      });
     });
   } catch (error) {
     res.status(500).json({ error: "An error occurred" });
@@ -940,10 +1855,20 @@ const getOrderById = async (req, res) => {
     return res.status(400).json({ message: "Order ID is required" });
   }
   try {
+    const userId = req.id;
+    const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(checkUserQuery, [userId], (userErr, userData) => {
+      if (userErr || !userData.length) {
+        return res.status(500).json({ success: false, message: "An error occurred while fetching order details" });
+      }
+      const { is_admin, created_by } = userData[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+
     // Query to fetch order details, customer info, waiter info, and bill details
     const getOrderDetailsQuery = `
   SELECT
   co.*,
+  rt.tablename,
   c.customer_name,
   c.customer_email,
   c.customer_address,
@@ -974,11 +1899,11 @@ const getOrderById = async (req, res) => {
   LEFT JOIN customer_info c ON co.customer_id = c.customer_id
   LEFT JOIN user w ON co.waiter_id = w.id
   LEFT JOIN bill b ON co.order_id = b.order_id
-  LEFT JOIN
-  shipping_method sm ON b.shipping_type = sm.ship_id
+  LEFT JOIN shipping_method sm ON b.shipping_type = sm.ship_id
   LEFT JOIN customer_type ct ON co.cutomertype = ct.customer_type_id
+  LEFT JOIN rest_table rt ON co.table_no = rt.tableid
   WHERE
-  co.order_id = ?;
+  co.order_id = ? AND co.created_by = ?;
   `;
     // Query to fetch menu items associated with the order
     const getOrderMenuQuery = `
@@ -991,14 +1916,14 @@ const getOrderById = async (req, res) => {
   GROUP_CONCAT(a.price) AS add_on_prices
   FROM
   order_menu om
-  LEFT JOIN add_ons a ON FIND_IN_SET(a.add_on_id, om.add_on_id)
-  LEFT JOIN item_foods f ON om.menu_id = f.ProductsID
+  LEFT JOIN add_ons a ON FIND_IN_SET(a.add_on_id, om.add_on_id) AND a.created_by = ?
+  LEFT JOIN item_foods f ON om.menu_id = f.ProductsID AND f.UserIDInserted = ?
   LEFT JOIN variant v ON om.varientid = v.variantid
   WHERE
   om.order_id = ?
   GROUP BY om.menu_id, om.varientid;
   `;
-    db.pool.query(getOrderDetailsQuery, [order_id], (err, orderResult) => {
+    db.pool.query(getOrderDetailsQuery, [order_id, creatorId], (err, orderResult) => {
       if (err) {
         console.log(err);
         return res.status(500).json({
@@ -1006,7 +1931,10 @@ const getOrderById = async (req, res) => {
           message: "An error occurred while fetching order details",
         });
       }
-      db.pool.query(getOrderMenuQuery, [order_id], (err, menuResult) => {
+      if (!orderResult.length) {
+        return res.status(404).json({ success: false, message: "Order not found" });
+      }
+      db.pool.query(getOrderMenuQuery, [creatorId, creatorId, order_id], (err, menuResult) => {
         if (err) {
           console.log(err);
           return res.status(500).json({
@@ -1043,6 +1971,7 @@ const getOrderById = async (req, res) => {
         });
       });
     });
+    }); // end user lookup
   } catch (error) {
     res.status(500).json({ error: "An error occurred" });
   }
@@ -1050,53 +1979,67 @@ const getOrderById = async (req, res) => {
 
 const getOngoingOrder = async (req, res) => {
   try {
-    const getOnGoingOrdersQuery = `
-      SELECT
-        co.*,
-        c.customer_name,
-        w.firstname AS waiter_first_name,
-        w.lastname AS waiter_last_name,
-        rt.tablename,
-         b.discount,
-          b.service_charge,
-          b.shipping_type,
-          b.VAT,
-          b.bill_amount,
-          b.bill_date,
-          b.bill_status,
-          b.payment_method_id,
-          sm.shipping_method AS shipping_method_name
-      FROM
-        customer_order co
-       LEFT JOIN
-        customer_info c ON co.customer_id = c.customer_id
-       LEFT JOIN
-        user w ON co.waiter_id = w.id
-         LEFT JOIN
-        rest_table rt ON co.table_no = rt.tableid
-         LEFT JOIN
-      bill b ON co.order_id = b.order_id
-      LEFT JOIN
-      shipping_method sm ON b.shipping_type = sm.ship_id
-      WHERE
-      co.orderacceptreject = 1
-      AND co.order_status = 2
-        AND  b.bill_status = 0
-      ORDER BY
-        co.order_id DESC;
-    `;
-    // co.customerpaid = co.totalamount inclue into query when needed
-    db.pool.query(getOnGoingOrdersQuery, (err, result) => {
-      if (err) {
-        console.log(err);
-        res.status(500).json({ success: false, message: "An error occurred" });
-      } else {
-        res.status(200).json({
-          success: true,
-          data: result,
-          message: "Ongoing Orders fetched successfully",
-        });
+    const userId = req.id;
+    const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(checkUserQuery, [userId], (userErr, userData) => {
+      if (userErr || !userData.length) {
+        return res.status(500).json({ success: false, message: "An error occurred" });
       }
+      const { is_admin, created_by } = userData[0];
+      if (!is_admin && !created_by) {
+        return res.status(403).json({ success: false, message: "You are not authorized to view orders." });
+      }
+      const creatorId = is_admin === 1 ? userId : created_by;
+
+      const getOnGoingOrdersQuery = `
+        SELECT
+          co.*,
+          c.customer_name,
+          w.firstname AS waiter_first_name,
+          w.lastname AS waiter_last_name,
+          rt.tablename,
+           b.discount,
+            b.service_charge,
+            b.shipping_type,
+            b.VAT,
+            b.bill_amount,
+            b.bill_date,
+            b.bill_status,
+            b.payment_method_id,
+            sm.shipping_method AS shipping_method_name
+        FROM
+          customer_order co
+         LEFT JOIN
+          customer_info c ON co.customer_id = c.customer_id
+         LEFT JOIN
+          user w ON co.waiter_id = w.id
+           LEFT JOIN
+          rest_table rt ON co.table_no = rt.tableid
+           LEFT JOIN
+        bill b ON co.order_id = b.order_id
+        LEFT JOIN
+        shipping_method sm ON b.shipping_type = sm.ship_id
+        WHERE
+        co.orderacceptreject = 1
+        AND co.order_status = 2
+          AND  b.bill_status = 0
+          AND co.created_by = ?
+        ORDER BY
+          co.order_id DESC;
+      `;
+      // co.customerpaid = co.totalamount inclue into query when needed
+      db.pool.query(getOnGoingOrdersQuery, [creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          res.status(500).json({ success: false, message: "An error occurred" });
+        } else {
+          res.status(200).json({
+            success: true,
+            data: result,
+            message: "Ongoing Orders fetched successfully",
+          });
+        }
+      });
     });
   } catch (error) {
     res.status(500).json({ error: "An error occurred" });
@@ -1115,9 +2058,18 @@ const cancelorder = (req, res) => {
     });
   }
 
-  // Step 1: Get table_no based on order_id
-  const getTableQuery = `SELECT table_no FROM customer_order WHERE order_id = ?`;
-  db.pool.query(getTableQuery, [order_id], (err, result) => {
+  const userId = req.id;
+  const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(checkUserQuery, [userId], (userErr, userData) => {
+    if (userErr || !userData.length) {
+      return res.status(500).json({ success: false, message: "An error occurred" });
+    }
+    const { is_admin, created_by } = userData[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+
+  // Step 1: Get table_no based on order_id, verifying ownership
+  const getTableQuery = `SELECT table_no FROM customer_order WHERE order_id = ? AND created_by = ?`;
+  db.pool.query(getTableQuery, [order_id, creatorId], (err, result) => {
     if (err) {
       console.error("Error fetching table_no:", err);
       return res.status(500).json({
@@ -1176,6 +2128,7 @@ const cancelorder = (req, res) => {
       });
     });
   });
+  }); // end user lookup
 };
 
 const cancelOrdersList = async (req, res) => {
@@ -1890,17 +2843,18 @@ const getOnlineOrders = async (req, res) => {
 
 const getQrorderdata = async (req, res) => {
   try {
-    const { categoryId, searchTerm = "", userId: queryUserId } = req.query;
+    const { categoryId, searchTerm = "" } = req.query;
 
     // ✅ Support both QR (query) + login (req.id)
-    const userId = queryUserId || req.id;
+    const userId = req.id || 79;
 
     if (!userId) {
       return res.status(400).json({ error: "userId is required" });
     }
 
     // 🔹 Get user info
-    const checkUserQuery = "SELECT created_by, is_admin FROM user WHERE id = ?";
+    const checkUserQuery =
+      "SELECT created_by, is_admin FROM user WHERE id = ?";
 
     db.pool.query(checkUserQuery, [userId], async (err, userData) => {
       if (err) {
@@ -1978,31 +2932,33 @@ const getQrorderdata = async (req, res) => {
       // 🔥 Variants + Addons
       const detailedProducts = await Promise.all(
         products.map(async (product) => {
-          // 🔹 Variants
+          // 🔹 Variants — join through item_foods to enforce company isolation
           const variants = await new Promise((resolve, reject) => {
             db.pool.query(
-              `SELECT variantid, menuid, variantName, price 
-               FROM variant WHERE menuid = ?`,
-              [product.ProductsID],
+              `SELECT v.variantid, v.menuid, v.variantName, v.price
+               FROM variant v
+               INNER JOIN item_foods f ON v.menuid = f.ProductsID
+               WHERE v.menuid = ? AND f.UserIDInserted = ?`,
+              [product.ProductsID, creatorId],
               (err, results) => {
                 if (err) return reject(err);
                 resolve(results || []);
-              },
+              }
             );
           });
 
-          // 🔹 Addons
+          // 🔹 Addons — filter by created_by to enforce company isolation
           const addons = await new Promise((resolve, reject) => {
             db.pool.query(
-              `SELECT a.* 
+              `SELECT a.*
                FROM menu_add_on ma
                LEFT JOIN add_ons a ON ma.add_on_id = a.add_on_id
-               WHERE ma.is_active = 1 AND ma.menu_id = ?`,
-              [product.ProductsID],
+               WHERE ma.is_active = 1 AND ma.menu_id = ? AND a.created_by = ?`,
+              [product.ProductsID, creatorId],
               (err, results) => {
                 if (err) return reject(err);
                 resolve(results || []);
-              },
+              }
             );
           });
 
@@ -2018,7 +2974,7 @@ const getQrorderdata = async (req, res) => {
             variants,
             addons,
           };
-        }),
+        })
       );
 
       res.status(200).json(detailedProducts);
@@ -2028,6 +2984,7 @@ const getQrorderdata = async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 };
+
 const Placeqrorder = (req, res) => {
   const {
     order_details,
@@ -2070,19 +3027,19 @@ const Placeqrorder = (req, res) => {
       console.log("c", customer_id);
       // const total_amount = grand_total - VAT ;
       // Insert the order
-      const orderQuery = `INSERT INTO customer_order 
-      (saleinvoice, cutomertype, isthirdparty, waiter_id, order_date, order_time, table_no, totalamount, order_status, orderacceptreject, splitpay_status, customer_note, customer_id)
-      VALUES (?, ?, 0, 0, NOW(), CURTIME(), ?, ?, 1, 1, 0, ?, ?)`;
+      const orderQuery = `INSERT INTO customer_order
+      (saleinvoice, cutomertype, isthirdparty, waiter_id, order_date, order_time, table_no, totalamount, order_status, orderacceptreject, splitpay_status, customer_note, customer_id, created_by)
+      VALUES (?, ?, 0, 0, NOW(), CURTIME(), ?, ?, 1, 1, 0, ?, ?, ?)`;
 
       const maxOrderIdQuery =
-        "SELECT MAX(order_id) AS maxOrderId FROM customer_order";
-      db.pool.query(maxOrderIdQuery, (err, result) => {
+        "SELECT MAX(saleinvoice) AS maxOrderId FROM customer_order WHERE created_by = ?";
+      db.pool.query(maxOrderIdQuery, [create_by], (err, result) => {
         if (err) {
           console.error("Error getting max order ID:", err);
           return res.status(500).json({ message: "Internal server error" });
         }
 
-        const maxOrderId = result[0]?.maxOrderId || 0;
+        const maxOrderId = parseInt(result[0]?.maxOrderId || 0);
         const invoiceId = maxOrderId + 1;
         console.log("grand total aaya ", grand_total);
         db.pool.query(
@@ -2094,6 +3051,7 @@ const Placeqrorder = (req, res) => {
             grand_total,
             customer_note,
             customer_id,
+            create_by,
           ],
 
           (err, result) => {
@@ -2224,30 +3182,44 @@ const Placeqrorder = (req, res) => {
 
 const getAllQrOrders = (req, res) => {
   try {
-    const query = `
-      SELECT 
-        co.order_id,
-        co.table_no,
-        co.totalamount,
-        co.order_status,
-        co.order_date,
-        co.order_time,
-        c.customer_name,
-        c.customer_phone
-      FROM customer_order co
-      LEFT JOIN customer_info c ON co.customer_id = c.customer_id
-      WHERE co.cutomertype = 99  -- QR orders
-      AND co.order_status = 1    -- Pending only
-      ORDER BY co.order_id DESC
-    `;
-
-    db.pool.query(query, (err, result) => {
-      if (err) {
-        console.error("Error fetching QR orders:", err);
+    const userId = req.id;
+    const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(checkUserQuery, [userId], (userErr, userData) => {
+      if (userErr || !userData.length) {
         return res.status(500).json({ error: "Internal Server Error" });
       }
+      const { is_admin, created_by } = userData[0];
+      if (!is_admin && !created_by) {
+        return res.status(403).json({ error: "You are not authorized to view orders." });
+      }
+      const creatorId = is_admin === 1 ? userId : created_by;
 
-      res.status(200).json(result);
+      const query = `
+        SELECT
+          co.order_id,
+          co.table_no,
+          co.totalamount,
+          co.order_status,
+          co.order_date,
+          co.order_time,
+          c.customer_name,
+          c.customer_phone
+        FROM customer_order co
+        LEFT JOIN customer_info c ON co.customer_id = c.customer_id
+        WHERE co.cutomertype = 99
+        AND co.order_status = 1
+        AND co.created_by = ?
+        ORDER BY co.order_id DESC
+      `;
+
+      db.pool.query(query, [creatorId], (err, result) => {
+        if (err) {
+          console.error("Error fetching QR orders:", err);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+
+        res.status(200).json(result);
+      });
     });
   } catch (error) {
     console.error(error);
@@ -2263,114 +3235,119 @@ const getQrOrderById = async (req, res) => {
   }
 
   try {
-    // Query to fetch order details, customer info, waiter info, and bill details
-    const getOrderDetailsQuery = `
-          SELECT
-              co.*,
-              c.customer_name,
-              c.customer_email,
-              c.customer_address,
-              c.customer_phone,
-              w.firstname AS waiter_first_name,
-              w.lastname AS waiter_last_name,
-              b.discount,
-              b.service_charge,
-              b.shipping_type,
-              b.VAT,
-              b.bill_id,
-              b.bill_amount,
-              b.bill_date,
-              b.bill_status,
-              b.payment_method_id,
-             
-              CASE co.order_status
-                                 WHEN 1 THEN 'Pending'
-                                 WHEN 2 THEN 'Processing'
-                                 WHEN 3 THEN 'Ready'
-                                 WHEN 4 THEN 'Served'
-                                 WHEN 5 THEN 'Cancel'
-                                 WHEN 6 THEN 'Hold'
-
-                               END as order_status_name
-          FROM
-              customer_order co
-              LEFT JOIN customer_info c ON co.customer_id = c.customer_id
-              LEFT JOIN user w ON co.waiter_id = w.id
-              LEFT JOIN bill b ON co.order_id = b.order_id
-            
-          WHERE
-              co.order_id = ?;
-      `;
-
-    // Query to fetch menu items associated with the order
-    const getOrderMenuQuery = `
-          SELECT
-              om.*,
-              f.*,
-              v.variantName,
-              GROUP_CONCAT(a.add_on_id) AS add_on_ids,
-              GROUP_CONCAT(a.add_on_name) AS add_on_names,
-              GROUP_CONCAT(a.price) AS add_on_prices
-          FROM
-              order_menu om
-              LEFT JOIN add_ons a ON FIND_IN_SET(a.add_on_id, om.add_on_id)
-              LEFT JOIN item_foods f ON om.menu_id = f.ProductsID
-              LEFT JOIN variant v ON om.varientid = v.variantid
-          WHERE
-              om.order_id = ?
-          GROUP BY om.menu_id, om.varientid;  
-      `;
-
-    db.pool.query(getOrderDetailsQuery, [order_id], (err, orderResult) => {
-      if (err) {
-        console.log(err);
-        return res.status(500).json({
-          success: false,
-          message: "An error occurred while fetching order details",
-        });
+    const userId = req.id;
+    const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(checkUserQuery, [userId], (userErr, userData) => {
+      if (userErr || !userData.length) {
+        return res.status(500).json({ success: false, message: "An error occurred while fetching order details" });
       }
+      const { is_admin, created_by } = userData[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
 
-      db.pool.query(getOrderMenuQuery, [order_id], (err, menuResult) => {
+      // Query to fetch order details, customer info, waiter info, and bill details
+      const getOrderDetailsQuery = `
+            SELECT
+                co.*,
+                c.customer_name,
+                c.customer_email,
+                c.customer_address,
+                c.customer_phone,
+                w.firstname AS waiter_first_name,
+                w.lastname AS waiter_last_name,
+                b.discount,
+                b.service_charge,
+                b.shipping_type,
+                b.VAT,
+                b.bill_id,
+                b.bill_amount,
+                b.bill_date,
+                b.bill_status,
+                b.payment_method_id,
+                CASE co.order_status
+                  WHEN 1 THEN 'Pending'
+                  WHEN 2 THEN 'Processing'
+                  WHEN 3 THEN 'Ready'
+                  WHEN 4 THEN 'Served'
+                  WHEN 5 THEN 'Cancel'
+                  WHEN 6 THEN 'Hold'
+                END as order_status_name
+            FROM
+                customer_order co
+                LEFT JOIN customer_info c ON co.customer_id = c.customer_id
+                LEFT JOIN user w ON co.waiter_id = w.id
+                LEFT JOIN bill b ON co.order_id = b.order_id
+            WHERE
+                co.order_id = ? AND co.created_by = ?;
+        `;
+
+      // Query to fetch menu items associated with the order
+      const getOrderMenuQuery = `
+            SELECT
+                om.*,
+                f.*,
+                v.variantName,
+                GROUP_CONCAT(a.add_on_id) AS add_on_ids,
+                GROUP_CONCAT(a.add_on_name) AS add_on_names,
+                GROUP_CONCAT(a.price) AS add_on_prices
+            FROM
+                order_menu om
+                LEFT JOIN add_ons a ON FIND_IN_SET(a.add_on_id, om.add_on_id)
+                LEFT JOIN item_foods f ON om.menu_id = f.ProductsID
+                LEFT JOIN variant v ON om.varientid = v.variantid
+            WHERE
+                om.order_id = ?
+            GROUP BY om.menu_id, om.varientid;
+        `;
+
+      db.pool.query(getOrderDetailsQuery, [order_id, creatorId], (err, orderResult) => {
         if (err) {
           console.log(err);
           return res.status(500).json({
             success: false,
-            message: "An error occurred while fetching menu items",
+            message: "An error occurred while fetching order details",
           });
         }
 
-        // Process menuResult to structure add-on data
-        const structuredMenuItems = menuResult.map((item) => {
-          const addOnIds = item.add_on_ids ? item.add_on_ids.split(",") : [];
-          const addOnNames = item.add_on_names
-            ? item.add_on_names.split(",")
-            : [];
-          const addOnPrices = item.add_on_prices
-            ? item.add_on_prices.split(",")
-            : [];
-          const addOnQuantities = item.addonsqty
-            ? item.addonsqty.split(",")
-            : [];
+        if (!orderResult.length) {
+          return res.status(404).json({ success: false, message: "Order not found" });
+        }
 
-          const addOns = addOnIds.map((id, index) => ({
-            add_on_id: id,
-            add_on_name: addOnNames[index] || null,
-            add_on_price: addOnPrices[index] || null,
-            add_on_quantity: addOnQuantities[index] || null,
-          }));
+        db.pool.query(getOrderMenuQuery, [order_id], (err, menuResult) => {
+          if (err) {
+            console.log(err);
+            return res.status(500).json({
+              success: false,
+              message: "An error occurred while fetching menu items",
+            });
+          }
 
-          return {
-            ...item,
-            add_ons: addOns,
-          };
-        });
+          // Process menuResult to structure add-on data
+          const structuredMenuItems = menuResult.map((item) => {
+            const addOnIds = item.add_on_ids ? item.add_on_ids.split(",") : [];
+            const addOnNames = item.add_on_names ? item.add_on_names.split(",") : [];
+            const addOnPrices = item.add_on_prices ? item.add_on_prices.split(",") : [];
+            const addOnQuantities = item.addonsqty ? item.addonsqty.split(",") : [];
 
-        res.status(200).json({
-          orderDetails: orderResult,
-          menuItems: structuredMenuItems,
+            const addOns = addOnIds.map((id, index) => ({
+              add_on_id: id,
+              add_on_name: addOnNames[index] || null,
+              add_on_price: addOnPrices[index] || null,
+              add_on_quantity: addOnQuantities[index] || null,
+            }));
+
+            return {
+              ...item,
+              add_ons: addOns,
+            };
+          });
+
+          res.status(200).json({
+            orderDetails: orderResult,
+            menuItems: structuredMenuItems,
+          });
         });
       });
-    });
+    }); // end user lookup
   } catch (error) {
     res.status(500).json({ error: "An error occurred" });
   }
@@ -2389,7 +3366,7 @@ const Updateqrorder = (req, res) => {
     customer_note,
   } = req.body;
 
-  const update_by = req.id || 178;
+  const update_by = req.id;
 
   // Validate required fields
   if (
@@ -2401,6 +3378,23 @@ const Updateqrorder = (req, res) => {
   ) {
     return res.status(400).json({ message: "Invalid request data" });
   }
+
+  const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(checkUserQuery, [update_by], (userErr, userData) => {
+    if (userErr || !userData.length) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+    const { is_admin, created_by } = userData[0];
+    const creatorId = is_admin === 1 ? update_by : created_by;
+
+    const checkOwnershipQuery = "SELECT order_id FROM customer_order WHERE order_id = ? AND created_by = ?";
+    db.pool.query(checkOwnershipQuery, [order_id, creatorId], (ownErr, ownResult) => {
+      if (ownErr) {
+        return res.status(500).json({ message: "Internal server error" });
+      }
+      if (!ownResult.length) {
+        return res.status(404).json({ message: "No order found with the provided order_id" });
+      }
 
   // Update customer info
   const updateCustomerQuery = `UPDATE customer_info SET customer_name = ?, customer_phone = ? WHERE customer_id = (SELECT customer_id FROM customer_order WHERE order_id = ?)`;
@@ -2516,6 +3510,8 @@ const Updateqrorder = (req, res) => {
       );
     },
   );
+    }); // end ownership check
+  }); // end user lookup
 };
 
 const getQrOrderDetailsById = async (req, res) => {
@@ -2526,116 +3522,121 @@ const getQrOrderDetailsById = async (req, res) => {
   }
 
   try {
-    // Query to fetch order details, customer info, waiter info, and bill details
-    const getOrderDetailsQuery = `
-          SELECT
-              co.*,
-              c.customer_name,
-              c.customer_email,
-              c.customer_address,
-              c.customer_phone,
-              w.firstname AS waiter_first_name,
-              w.lastname AS waiter_last_name,
-              b.discount,
-              b.service_charge,
-              b.shipping_type,
-              b.VAT,
-              b.bill_id,
-              b.bill_amount,
-              b.bill_date,
-              b.bill_status,
-              b.payment_method_id,
-             
-              CASE co.order_status
-                                 WHEN 1 THEN 'Pending'
-                                 WHEN 2 THEN 'Processing'
-                                 WHEN 3 THEN 'Ready'
-                                 WHEN 4 THEN 'Served'
-                                 WHEN 5 THEN 'Cancel'
-                                 WHEN 6 THEN 'Hold'
-
-                               END as order_status_name
-          FROM
-              customer_order co
-              LEFT JOIN customer_info c ON co.customer_id = c.customer_id
-              LEFT JOIN user w ON co.waiter_id = w.id
-              LEFT JOIN bill b ON co.order_id = b.order_id
-            
-          WHERE
-              co.order_id = ?;
-      `;
-
-    // Query to fetch menu items associated with the order
-    const getOrderMenuQuery = `
-          SELECT
-              om.*,
-              om.menuqty AS quantity,
-              f.*,
-              v.variantName,
-              om.varientid AS variantid,
-              GROUP_CONCAT(a.add_on_id) AS add_on_ids,
-              GROUP_CONCAT(a.add_on_name) AS add_on_names,
-              GROUP_CONCAT(a.price) AS add_on_prices
-          FROM
-              order_menu om
-              LEFT JOIN add_ons a ON FIND_IN_SET(a.add_on_id, om.add_on_id)
-              LEFT JOIN item_foods f ON om.menu_id = f.ProductsID
-              LEFT JOIN variant v ON om.varientid = v.variantid
-          WHERE
-              om.order_id = ?
-          GROUP BY om.menu_id, om.varientid;  
-      `;
-
-    db.pool.query(getOrderDetailsQuery, [order_id], (err, orderResult) => {
-      if (err) {
-        console.log(err);
-        return res.status(500).json({
-          success: false,
-          message: "An error occurred while fetching order details",
-        });
+    const userId = req.id;
+    const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(checkUserQuery, [userId], (userErr, userData) => {
+      if (userErr || !userData.length) {
+        return res.status(500).json({ success: false, message: "An error occurred while fetching order details" });
       }
+      const { is_admin, created_by } = userData[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
 
-      db.pool.query(getOrderMenuQuery, [order_id], (err, menuResult) => {
+      // Query to fetch order details, customer info, waiter info, and bill details
+      const getOrderDetailsQuery = `
+            SELECT
+                co.*,
+                c.customer_name,
+                c.customer_email,
+                c.customer_address,
+                c.customer_phone,
+                w.firstname AS waiter_first_name,
+                w.lastname AS waiter_last_name,
+                b.discount,
+                b.service_charge,
+                b.shipping_type,
+                b.VAT,
+                b.bill_id,
+                b.bill_amount,
+                b.bill_date,
+                b.bill_status,
+                b.payment_method_id,
+                CASE co.order_status
+                  WHEN 1 THEN 'Pending'
+                  WHEN 2 THEN 'Processing'
+                  WHEN 3 THEN 'Ready'
+                  WHEN 4 THEN 'Served'
+                  WHEN 5 THEN 'Cancel'
+                  WHEN 6 THEN 'Hold'
+                END as order_status_name
+            FROM
+                customer_order co
+                LEFT JOIN customer_info c ON co.customer_id = c.customer_id
+                LEFT JOIN user w ON co.waiter_id = w.id
+                LEFT JOIN bill b ON co.order_id = b.order_id
+            WHERE
+                co.order_id = ? AND co.created_by = ?;
+        `;
+
+      // Query to fetch menu items associated with the order
+      const getOrderMenuQuery = `
+            SELECT
+                om.*,
+                om.menuqty AS quantity,
+                f.*,
+                v.variantName,
+                om.varientid AS variantid,
+                GROUP_CONCAT(a.add_on_id) AS add_on_ids,
+                GROUP_CONCAT(a.add_on_name) AS add_on_names,
+                GROUP_CONCAT(a.price) AS add_on_prices
+            FROM
+                order_menu om
+                LEFT JOIN add_ons a ON FIND_IN_SET(a.add_on_id, om.add_on_id)
+                LEFT JOIN item_foods f ON om.menu_id = f.ProductsID
+                LEFT JOIN variant v ON om.varientid = v.variantid
+            WHERE
+                om.order_id = ?
+            GROUP BY om.menu_id, om.varientid;
+        `;
+
+      db.pool.query(getOrderDetailsQuery, [order_id, creatorId], (err, orderResult) => {
         if (err) {
           console.log(err);
           return res.status(500).json({
             success: false,
-            message: "An error occurred while fetching menu items",
+            message: "An error occurred while fetching order details",
           });
         }
 
-        // Process menuResult to structure add-on data
-        const structuredMenuItems = menuResult.map((item) => {
-          const addOnIds = item.add_on_ids ? item.add_on_ids.split(",") : [];
-          const addOnNames = item.add_on_names
-            ? item.add_on_names.split(",")
-            : [];
-          const addOnPrices = item.add_on_prices
-            ? item.add_on_prices.split(",")
-            : [];
-          const addOnQuantities = item.addonsqty
-            ? item.addonsqty.split(",")
-            : [];
+        if (!orderResult.length) {
+          return res.status(404).json({ success: false, message: "Order not found" });
+        }
 
-          const addOns = addOnIds.map((id, index) => ({
-            add_on_id: id,
-            add_on_name: addOnNames[index] || null,
-            add_on_price: addOnPrices[index] || null,
-            add_on_quantity: addOnQuantities[index] || null,
-          }));
+        db.pool.query(getOrderMenuQuery, [order_id], (err, menuResult) => {
+          if (err) {
+            console.log(err);
+            return res.status(500).json({
+              success: false,
+              message: "An error occurred while fetching menu items",
+            });
+          }
 
-          return {
-            ...item,
-            add_ons: addOns,
-          };
-        });
+          // Process menuResult to structure add-on data
+          const structuredMenuItems = menuResult.map((item) => {
+            const addOnIds = item.add_on_ids ? item.add_on_ids.split(",") : [];
+            const addOnNames = item.add_on_names ? item.add_on_names.split(",") : [];
+            const addOnPrices = item.add_on_prices ? item.add_on_prices.split(",") : [];
+            const addOnQuantities = item.addonsqty ? item.addonsqty.split(",") : [];
 
-        res.status(200).json({
-          orderDetails: orderResult,
-          menuItems: structuredMenuItems,
+            const addOns = addOnIds.map((id, index) => ({
+              add_on_id: id,
+              add_on_name: addOnNames[index] || null,
+              add_on_price: addOnPrices[index] || null,
+              add_on_quantity: addOnQuantities[index] || null,
+            }));
+
+            return {
+              ...item,
+              add_ons: addOns,
+            };
+          });
+
+          res.status(200).json({
+            orderDetails: orderResult,
+            menuItems: structuredMenuItems,
+          });
         });
       });
-    });
+    }); // end user lookup
   } catch (error) {
     res.status(500).json({ error: "An error occurred" });
   }
@@ -2657,10 +3658,10 @@ module.exports = {
   OrderListBySearchFilter,
   pendingOrders,
   getOnlineOrders,
+  getAllQrOrders,
   getQrorderdata,
   Placeqrorder,
   getQrOrderById,
-  getAllQrOrders,
   Updateqrorder,
   getQrOrderDetailsById,
 };

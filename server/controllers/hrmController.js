@@ -241,19 +241,26 @@ const getAllPositions = async (req, res) => {
 
 const deletePosition = async (req, res) => {
   const pos_id = req.params.id;
+  const userId = req.id;
 
   try {
-    // Check if the position exists first
-    const checkSql = 'SELECT * FROM `position` WHERE pos_id = ?';
-    const positionExists = await dbQuery(checkSql, [pos_id]);
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const checkSql = 'SELECT * FROM `position` WHERE pos_id = ? AND created_by = ?';
+    const positionExists = await dbQuery(checkSql, [pos_id, creatorId]);
 
     if (positionExists.length === 0) {
       return res.status(404).json({ success: false, message: 'Position not found' });
     }
 
-    // Proceed with deletion
-    const sql = 'DELETE FROM `position` WHERE pos_id = ?';
-    const results = await dbQuery(sql, [pos_id]);
+    const sql = 'DELETE FROM `position` WHERE pos_id = ? AND created_by = ?';
+    const results = await dbQuery(sql, [pos_id, creatorId]);
 
     res.status(200).json({ success: true, message: 'Position deleted successfully', data: results });
   } catch (err) {
@@ -262,10 +269,19 @@ const deletePosition = async (req, res) => {
   }
 };
 const getPositionById = async (req, res) => {
-  const pos_id  = req.params.id;
+  const pos_id = req.params.id;
+  const userId = req.id;
   try {
-    const sql = 'SELECT pos_id, position_name, position_details FROM `position` WHERE pos_id = ?';
-    const results = await dbQuery(sql, [pos_id]);
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const sql = 'SELECT pos_id, position_name, position_details FROM `position` WHERE pos_id = ? AND created_by = ?';
+    const results = await dbQuery(sql, [pos_id, creatorId]);
 
     if (results.length === 0) {
       return res.status(404).json({ success: false, message: 'Position not found' });
@@ -281,52 +297,43 @@ const getPositionById = async (req, res) => {
 
 const updatePosition = async (req, res) => {
   const pos_id = req.params.id;
-  const { position_name, position_details, created_by } = req.body;
- 
+  const { position_name, position_details } = req.body;
+  const userId = req.id;
+
   try {
-    // Step 1: Check if the position exists
-    const checkSql = 'SELECT * FROM `position` WHERE pos_id = ?';
-    const positionExists = await dbQuery(checkSql, [pos_id]);
- 
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const checkSql = 'SELECT * FROM `position` WHERE pos_id = ? AND created_by = ?';
+    const positionExists = await dbQuery(checkSql, [pos_id, creatorId]);
+
     if (positionExists.length === 0) {
       return res.status(404).json({ success: false, message: 'Position not found' });
     }
- 
-    // Step 2: Fallback to existing values if not provided or empty
+
     const updatedName = position_name?.trim() || positionExists[0].position_name;
     const updatedDetails = position_details?.trim() || positionExists[0].position_details;
-    const updatedCreatedBy = created_by?.trim() || positionExists[0].created_by;
- 
-    // Step 3: Update the position
+
     const updateSql = `
       UPDATE \`position\`
       SET position_name = ?, position_details = ?, created_by = ?
-      WHERE pos_id = ?
+      WHERE pos_id = ? AND created_by = ?
     `;
-    const results = await dbQuery(updateSql, [
-      updatedName,
-      updatedDetails,
-      updatedCreatedBy,
-      pos_id
-    ]);
- 
-    // Step 4: Respond to client
+    await dbQuery(updateSql, [updatedName, updatedDetails, creatorId, pos_id, creatorId]);
+
     res.status(200).json({
       success: true,
       message: 'Position updated successfully',
-      data: {
-        pos_id,
-        position_name: updatedName,
-        position_details: updatedDetails,
-        created_by: updatedCreatedBy
-      }
+      data: { pos_id, position_name: updatedName, position_details: updatedDetails, created_by: creatorId }
     });
   } catch (err) {
     console.error('Error updating position:', err);
-    res.status(500).json({
-      success: false,
-      message: 'An error occurred while updating the position'
-    });
+    res.status(500).json({ success: false, message: 'An error occurred while updating the position' });
   }
 };
 const getALlDutyTypes = async (req, res) => {
@@ -582,30 +589,35 @@ const createEmployeeHistory = async (req, res) => {
 
 const deleteEmployee = async (req, res) => {
   try {
-    const { id } = req.params; // emp_his_id
+    const { id } = req.params;
+    const userId = req.id;
     console.log("Deleting Employee History ID:", id);
- 
-    // Step 1: Get the user_id from employee_history
-    const getUserIdSql = "SELECT user_id FROM employee_history WHERE emp_his_id = ?";
-    const userResult = await dbQuery(getUserIdSql, [id]);
- 
-    if (userResult.length === 0) {
+
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const getUserIdSql = "SELECT user_id FROM employee_history WHERE emp_his_id = ? AND created_by = ?";
+    const empResult = await dbQuery(getUserIdSql, [id, creatorId]);
+
+    if (empResult.length === 0) {
       return res.status(404).json({ success: false, message: "Employee history not found" });
     }
- 
-    const userId = userResult[0].user_id;
- 
-    // Step 2: Delete employee history record
-    const deleteHistorySql = "DELETE FROM employee_history WHERE emp_his_id = ?";
-    const historyResult = await dbQuery(deleteHistorySql, [id]);
- 
-    // Step 3: If user_id exists, delete user record
-    if (userId) {
+
+    const empUserId = empResult[0].user_id;
+
+    const deleteHistorySql = "DELETE FROM employee_history WHERE emp_his_id = ? AND created_by = ?";
+    await dbQuery(deleteHistorySql, [id, creatorId]);
+
+    if (empUserId) {
       const deleteUserSql = "DELETE FROM user WHERE id = ?";
-      await dbQuery(deleteUserSql, [userId]);
+      await dbQuery(deleteUserSql, [empUserId]);
     }
- 
-    // Step 4: Send response
+
     return res.status(200).json({
       success: true,
       message: "Employee history and associated user deleted successfully",
@@ -623,7 +635,16 @@ const deleteEmployee = async (req, res) => {
 const getemployeeBYID = async (req, res) => {
   try {
     const { id } = req.params;
- 
+    const userId = req.id;
+
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
     // SQL query
     let sql = `
       SELECT
@@ -686,12 +707,12 @@ const getemployeeBYID = async (req, res) => {
       LEFT JOIN
         rate_type rt ON eh.rate_type = rt.id
       WHERE
-        eh.emp_his_id = ?
+        eh.emp_his_id = ? AND eh.created_by = ?
     `;
- 
+
     // Execute the query
-    const results = await dbQuery(sql, [id]);
- 
+    const results = await dbQuery(sql, [id, creatorId]);
+
     // Send successful response
     res.status(200).json({ success: true, data: results });
   } catch (err) {
@@ -845,6 +866,15 @@ const getemployeeBYID = async (req, res) => {
 const updateEmployeeHistory = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.id;
+
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ message: "User not found" });
+    const { is_admin, created_by: userCreatedBy } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : userCreatedBy;
+    if (!creatorId) return res.status(403).json({ message: "Unauthorized" });
 
     const {
       first_name,
@@ -875,15 +905,14 @@ const updateEmployeeHistory = async (req, res) => {
       rate,
       pay_frequency,
       pay_frequency_txt,
-      created_by,
     } = req.body;
 
     const picture = req.file ? req.file.filename : null;
 
-    // Fetch current employee data
+    // Fetch current employee data with ownership check
     const result = await dbQuery(
-      "SELECT * FROM employee_history WHERE emp_his_id = ?",
-      [id]
+      "SELECT * FROM employee_history WHERE emp_his_id = ? AND created_by = ?",
+      [id, creatorId]
     );
 
     if (result.length === 0) {
@@ -923,7 +952,7 @@ const updateEmployeeHistory = async (req, res) => {
       pay_frequency: pay_frequency || currentData.pay_frequency,
       pay_frequency_txt: pay_frequency_txt || currentData.pay_frequency_txt,
       picture: picture || currentData.picture,
-      created_by: created_by || currentData.created_by,
+      created_by: currentData.created_by,  // always keep stored value
     };
 
     // ✅ Check for duplicate email or phone (excluding current record)
@@ -1009,14 +1038,25 @@ const updateEmployeeHistory = async (req, res) => {
 
 const deleteDepartment = (req, res) => {
   const { id } = req.params;
-  const sql = "DELETE FROM department WHERE dept_id = ?";
-  
-  db.pool.query(sql, [id], (err, data) => {
-    if (err) {
-      console.error("Database query error: ", err);
-      return res.status(500).json({ error: "Internal Server Error" });
-    }
-    return res.json({ message: "Department deleted successfully" });
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+
+    const sql = "DELETE FROM department WHERE dept_id = ? AND created_by = ?";
+    db.pool.query(sql, [id, creatorId], (err, data) => {
+      if (err) {
+        console.error("Database query error: ", err);
+        return res.status(500).json({ error: "Internal Server Error" });
+      }
+      if (data.affectedRows === 0) return res.status(404).json({ error: "Department not found" });
+      return res.json({ message: "Department deleted successfully" });
+    });
   });
 };
 
@@ -1026,22 +1066,29 @@ const deleteDepartment = (req, res) => {
 
 const getDepartmentById = (req, res) => {
   const { id } = req.params;
+  const userId = req.id;
 
-  // SQL query to fetch department by id
-  const fetchDepartmentSql = 'SELECT * FROM department WHERE dept_id = ?';
-  
-  db.pool.query(fetchDepartmentSql, [id], (fetchErr, fetchData) => {
-    if (fetchErr) {
-      console.error('Database fetch error:', fetchErr);
-      return res.status(500).json({ success: false, message: 'Internal Server Error' });
-    }
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    if (fetchData.length === 0) {
-      return res.status(404).json({ success: false, message: 'Department record not found' });
-    }
+    const fetchDepartmentSql = 'SELECT * FROM department WHERE dept_id = ? AND created_by = ?';
+    db.pool.query(fetchDepartmentSql, [id, creatorId], (fetchErr, fetchData) => {
+      if (fetchErr) {
+        console.error('Database fetch error:', fetchErr);
+        return res.status(500).json({ success: false, message: 'Internal Server Error' });
+      }
 
-    // Return the department data if found
-    res.status(200).json({ success: true, data: fetchData[0] });
+      if (fetchData.length === 0) {
+        return res.status(404).json({ success: false, message: 'Department record not found' });
+      }
+
+      res.status(200).json({ success: true, data: fetchData[0] });
+    });
   });
 };
 
@@ -1230,25 +1277,41 @@ const createDivison = (req, res) => {
 
 const deleteDivison = (req, res) => {
   const { id } = req.params;
-  const sql = 'DELETE FROM department WHERE dept_id = ?';
-  db.pool.query(sql, [id], (err, result) => {
-      if (err) {
-          return res.status(500).json({ error: err.message });
-      }
-      if (result.affectedRows === 0) {
-          return res.status(404).json({ message: 'Department not found' });
-      }
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+
+    const sql = 'DELETE FROM department WHERE dept_id = ? AND created_by = ?';
+    db.pool.query(sql, [id, creatorId], (err, result) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (result.affectedRows === 0) return res.status(404).json({ message: 'Department not found' });
       res.json({ message: 'Department deleted' });
+    });
   });
 };
 
 // get by id
 
-const getALldivisionbyId= async (req, res) => {
-  const  {id} =req.params;
+const getALldivisionbyId = async (req, res) => {
+  const { id } = req.params;
+  const userId = req.id;
   try {
-    const sql = 'SELECT * FROM department WHERE dept_id=?';
-    const result = await dbQuery(sql,[id]);
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).send({ message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).send({ message: "Unauthorized" });
+
+    const sql = 'SELECT * FROM department WHERE dept_id = ? AND created_by = ?';
+    const result = await dbQuery(sql, [id, creatorId]);
 
     // Check if result has any data
     if (!result || result.length === 0) {
@@ -1281,52 +1344,60 @@ const getALldivisionbyId= async (req, res) => {
 
 const updateDivison = (req, res) => {
   const { id } = req.params;
-  const { department_name, parent_id, created_by } = req.body;
- 
-  // Step 1: Fetch the current department data
-  const fetchCurrentDataSql = 'SELECT * FROM department WHERE dept_id = ?';
-  db.pool.query(fetchCurrentDataSql, [id], (fetchErr, fetchData) => {
+  const { department_name, parent_id } = req.body;
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+
+  const fetchCurrentDataSql = 'SELECT * FROM department WHERE dept_id = ? AND created_by = ?';
+  db.pool.query(fetchCurrentDataSql, [id, creatorId], (fetchErr, fetchData) => {
     if (fetchErr) {
       console.error('Database fetch error:', fetchErr);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
- 
+
     if (fetchData.length === 0) {
       return res.status(404).json({ success: false, message: 'Department record not found' });
     }
- 
+
     const currentData = fetchData[0];
- 
-    // Step 2: Prepare the updated data
+
     const updatedData = {
       department_name: department_name !== undefined ? department_name : currentData.department_name,
       parent_id: parent_id !== undefined ? parent_id : currentData.parent_id,
-      created_by: created_by !== undefined ? created_by : currentData.created_by, // fallback to existing
+      created_by: currentData.created_by,
     };
- 
-    // Step 3: Update the department record
+
     const updateSql = `
       UPDATE department
       SET department_name = ?, parent_id = ?, created_by = ?
-      WHERE dept_id = ?
+      WHERE dept_id = ? AND created_by = ?
     `;
     db.pool.query(updateSql, [
       updatedData.department_name,
       updatedData.parent_id,
       updatedData.created_by,
-      id
+      id,
+      creatorId
     ], (updateErr, result) => {
       if (updateErr) {
         console.error('Database update error:', updateErr);
         return res.status(500).json({ success: false, message: 'An error occurred' });
       }
-     
+
       if (result.affectedRows === 0) {
         return res.status(404).json({ success: false, message: 'Department record not found' });
       }
- 
+
       return res.status(200).json({ success: true, message: 'Department updated successfully' });
     });
+  });
   });
 };
 
@@ -1335,38 +1406,45 @@ const updateDivison = (req, res) => {
 
 const updateDepartment = (req, res) => {
   const { id } = req.params;
-  const { department_name, created_by } = req.body;
- 
-  // Step 1: Fetch the current department data
-  const fetchCurrentDataSql = 'SELECT * FROM department WHERE dept_id = ?';
-  db.pool.query(fetchCurrentDataSql, [id], (fetchErr, fetchData) => {
+  const { department_name } = req.body;
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+
+  const fetchCurrentDataSql = 'SELECT * FROM department WHERE dept_id = ? AND created_by = ?';
+  db.pool.query(fetchCurrentDataSql, [id, creatorId], (fetchErr, fetchData) => {
     if (fetchErr) {
       console.error('Database fetch error:', fetchErr);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
- 
+
     if (fetchData.length === 0) {
       return res.status(404).json({ success: false, message: 'Department record not found' });
     }
- 
+
     const currentData = fetchData[0];
- 
-    // Step 2: Prepare the updated data
+
     const updatedData = {
       department_name: department_name !== undefined ? department_name : currentData.department_name,
-      created_by: created_by !== undefined ? created_by : currentData.created_by
+      created_by: currentData.created_by,
     };
- 
-    // Step 3: Update the department record
+
     const updateSql = `
       UPDATE department
       SET department_name = ?, created_by = ?
-      WHERE dept_id = ?
+      WHERE dept_id = ? AND created_by = ?
     `;
     db.pool.query(updateSql, [
       updatedData.department_name,
       updatedData.created_by,
-      id
+      id,
+      creatorId
     ], (updateErr, result) => {
       if (updateErr) {
         console.error('Database update error:', updateErr);
@@ -1377,6 +1455,7 @@ const updateDepartment = (req, res) => {
         return res.status(200).json({ success: true, message: 'Department updated successfully' });
       }
     });
+  });
   });
 };
 

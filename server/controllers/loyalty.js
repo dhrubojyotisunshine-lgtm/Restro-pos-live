@@ -211,61 +211,18 @@ const getLoyaltyPoints = (req, res) => {
 
 const deleteLoyaltyPoint = (req, res) => {
   const { id } = req.params;
+  const userId = req.id;
 
-  const query = "DELETE FROM loyality_point_setting WHERE id = ?";
-  db.pool.query(query, [id], (err, result) => {
-    if (err) {
-      console.error(err);
-      return res
-        .status(500)
-        .json({ success: false, message: "An error occurred" });
-    }
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    if (result.affectedRows === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Loyalty point setting not found" });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Loyalty point setting deleted successfully",
-    });
-  });
-};
-const getLoyaltyPointById = (req, res) => {
-  const { id } = req.params;
-
-  const query = "SELECT * FROM loyality_point_setting WHERE id = ?";
-  db.pool.query(query, [id], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res
-        .status(500)
-        .json({ success: false, message: "An error occurred" });
-    }
-
-    if (results.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Loyalty point setting not found" });
-    }
-
-    res.status(200).json({ success: true, data: results[0] });
-  });
-};
-
-const updateLoyaltyPoint = (req, res) => {
-  const { id } = req.params;
-  const { amount, earn_point, status } = req.body;
-  const created_by = req.id;
-  console.log(created_by);
-  const query =
-    "UPDATE loyality_point_setting SET amount = ?, earn_point = ?,status = ?,created_by=? WHERE id = ?";
-  db.pool.query(
-    query,
-    [amount, earn_point, status, created_by, id],
-    (err, result) => {
+    const query = "DELETE FROM loyality_point_setting WHERE id = ? AND created_by = ?";
+    db.pool.query(query, [id, creatorId], (err, result) => {
       if (err) {
         console.error(err);
         return res
@@ -281,10 +238,88 @@ const updateLoyaltyPoint = (req, res) => {
 
       res.status(200).json({
         success: true,
-        message: "Loyalty point setting updated successfully",
+        message: "Loyalty point setting deleted successfully",
       });
-    },
-  );
+    });
+  });
+};
+const getLoyaltyPointById = (req, res) => {
+  const { id } = req.params;
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const query = "SELECT * FROM loyality_point_setting WHERE id = ? AND created_by = ?";
+    db.pool.query(query, [id, creatorId], (err, results) => {
+      if (err) {
+        console.error(err);
+        return res
+          .status(500)
+          .json({ success: false, message: "An error occurred" });
+      }
+
+      if (results.length === 0) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Loyalty point setting not found" });
+      }
+
+      res.status(200).json({ success: true, data: results[0] });
+    });
+  });
+};
+
+const updateLoyaltyPoint = (req, res) => {
+  const { id } = req.params;
+  const { amount, earn_point, status } = req.body;
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const checkQuery = "SELECT id FROM loyality_point_setting WHERE id = ? AND created_by = ?";
+    db.pool.query(checkQuery, [id, creatorId], (err, checkResult) => {
+      if (err) return res.status(500).json({ success: false, message: "An error occurred" });
+      if (!checkResult.length) return res.status(404).json({ success: false, message: "Loyalty point setting not found" });
+
+      const query =
+        "UPDATE loyality_point_setting SET amount = ?, earn_point = ?, status = ?, created_by = ? WHERE id = ? AND created_by = ?";
+      db.pool.query(
+        query,
+        [amount, earn_point, status, creatorId, id, creatorId],
+        (err, result) => {
+          if (err) {
+            console.error(err);
+            return res
+              .status(500)
+              .json({ success: false, message: "An error occurred" });
+          }
+
+          if (result.affectedRows === 0) {
+            return res
+              .status(404)
+              .json({ success: false, message: "Loyalty point setting not found" });
+          }
+
+          res.status(200).json({
+            success: true,
+            message: "Loyalty point setting updated successfully",
+          });
+        },
+      );
+    });
+  });
 };
 //   const getCustomerBillDetails = async (req, res) => {
 //   console.log("API hit: getCustomerBillDetails");
@@ -388,8 +423,8 @@ const getCustomerBillDetails = (req, res) => {
         .json({ message: "Unauthorized to view bill details" });
     }
 
-    const loyaltyQuery = `SELECT amount, earn_point FROM loyality_point_setting WHERE status = 1 LIMIT 1`;
-    db.pool.query(loyaltyQuery, (err, loyaltyResults) => {
+    const loyaltyQuery = `SELECT amount, earn_point FROM loyality_point_setting WHERE status = 1 AND created_by = ? LIMIT 1`;
+    db.pool.query(loyaltyQuery, [creatorId], (err, loyaltyResults) => {
       if (err) {
         return res
           .status(500)
@@ -447,6 +482,7 @@ const getCustomerBillDetails = (req, res) => {
 
 const dueMergePayment = (req, res) => {
   const { orderid, payment_method_id, paidAmount, discount } = req.body;
+  const userId = req.id;
 
   // Validate order IDs
   if (!orderid || !Array.isArray(orderid) || orderid.length === 0) {
@@ -459,9 +495,17 @@ const dueMergePayment = (req, res) => {
 
   console.log("Request Body:", req.body);
 
-  // Check if orders exist in customer_order table
-  const checkOrderQuery = "SELECT * FROM customer_order WHERE order_id IN (?)";
-  db.pool.query(checkOrderQuery, [orderid], (err, orderResult) => {
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+  // Check if orders exist and belong to this tenant
+  const checkOrderQuery = "SELECT * FROM customer_order WHERE order_id IN (?) AND created_by = ?";
+  db.pool.query(checkOrderQuery, [orderid, creatorId], (err, orderResult) => {
     if (err) {
       console.error("Error checking customer_order:", err);
       return res.status(500).json({
@@ -539,6 +583,7 @@ const dueMergePayment = (req, res) => {
         );
       },
     );
+  });
   });
 };
 
@@ -811,12 +856,21 @@ const getOngoingOrderDueMerge = async (req, res) => {
 
 const getOrderByIdsDUeMerge = async (req, res) => {
   const order_ids = req.params.orderid;
+  const userId = req.id;
 
   if (!order_ids) {
     return res.status(400).json({ message: "Order IDs are required" });
   }
 
   try {
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ message: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ message: "Unauthorized" });
+
     // Convert `order_ids` into an array
     const orderIdsArray = order_ids.split(",").map((id) => id.trim());
 
@@ -824,6 +878,7 @@ const getOrderByIdsDUeMerge = async (req, res) => {
     const getOrderDetailsQuery = `
         SELECT
           co.*,
+          rt.tablename,
           c.customer_name,
           c.customer_email,
           c.customer_address,
@@ -854,8 +909,9 @@ const getOrderByIdsDUeMerge = async (req, res) => {
         LEFT JOIN user w ON co.waiter_id = w.id
         LEFT JOIN bill b ON co.order_id = b.order_id
         LEFT JOIN shipping_method sm ON b.shipping_type = sm.ship_id
+        LEFT JOIN rest_table rt ON co.table_no = rt.tableid
         WHERE
-          co.order_id IN (${orderIdsArray.map(() => "?").join(",")});
+          co.order_id IN (${orderIdsArray.map(() => "?").join(",")}) AND co.created_by = ?;
       `;
 
     // Query to fetch menu items for multiple order_ids
@@ -880,7 +936,7 @@ const getOrderByIdsDUeMerge = async (req, res) => {
     // Fetch order details
     db.pool.query(
       getOrderDetailsQuery,
-      [...orderIdsArray],
+      [...orderIdsArray, creatorId],
       (err, orderResults) => {
         if (err) {
           console.error(err);
@@ -952,6 +1008,8 @@ const getOrderByIdsDUeMerge = async (req, res) => {
 const cancelAllTypeOrder = (req, res) => {
   const order_ids = req.params.order_id; // Expecting multiple IDs as comma-separated values
   const { anyreason } = req.body;
+  const userId = req.id;
+
   if (!order_ids || !anyreason) {
     return res.status(400).json({
       success: false,
@@ -962,9 +1020,17 @@ const cancelAllTypeOrder = (req, res) => {
   // Convert order_ids into an array
   const orderIdsArray = order_ids.split(",").map((id) => id.trim());
 
-  // Step 1: Get table_no based on order_ids
-  const getTableQuery = `SELECT DISTINCT table_no FROM customer_order WHERE order_id IN (?)`;
-  db.pool.query(getTableQuery, [orderIdsArray], (err, result) => {
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+  // Step 1: Get table_no based on order_ids (scoped to tenant)
+  const getTableQuery = `SELECT DISTINCT table_no FROM customer_order WHERE order_id IN (?) AND created_by = ?`;
+  db.pool.query(getTableQuery, [orderIdsArray, creatorId], (err, result) => {
     if (err) {
       console.error("Error fetching table_no:", err);
       return res.status(500).json({
@@ -1026,6 +1092,7 @@ const cancelAllTypeOrder = (req, res) => {
         },
       );
     });
+  });
   });
 };
 

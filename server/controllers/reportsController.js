@@ -869,15 +869,23 @@ const getCashRegister = async (req, res) => {
 
 const getCashUser = async (req, res) => {
   try {
+    const userId = req.id;
+    const [userRow] = await dbQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [userId]);
+    if (!userRow) return res.status(404).json({ success: false, message: "User not found." });
+    const { is_admin, created_by } = userRow;
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized." });
+
     let query = `
       SELECT cr.id, cr.userid,
              CONCAT(u.firstname, ' ', u.lastname) AS username
       FROM tbl_cashregister AS cr
       LEFT JOIN user AS u ON cr.userid = u.id
       WHERE cr.status = 1
-      GROUP BY cr.userid;
+        AND (u.id = ? OR u.created_by = ?)
+      GROUP BY cr.userid
     `;
-    const rows = await dbQuery(query);
+    const rows = await dbQuery(query, [creatorId, creatorId]);
 
     res.status(200).json({
       success: true,
@@ -993,9 +1001,21 @@ const getCashRegisterView = async (req, res) => {
       });
     }
 
-    // First query to get opendate, closedate, and userid
-    const query1 = `SELECT opendate, closedate, userid FROM tbl_cashregister WHERE id = ?`;
-    const [result] = await dbQuery(query1, [id]); // Await the result and destructure
+    const callerId = req.id;
+    const [userRow] = await dbQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [callerId]);
+    if (!userRow) return res.status(404).json({ success: false, message: "User not found." });
+    const { is_admin, created_by } = userRow;
+    const creatorId = is_admin === 1 ? callerId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized." });
+
+    // Fetch register with tenant ownership check: the register's owner must belong to this tenant
+    const query1 = `
+      SELECT cr.opendate, cr.closedate, cr.userid
+      FROM tbl_cashregister cr
+      JOIN user u ON cr.userid = u.id
+      WHERE cr.id = ? AND (u.id = ? OR u.created_by = ?)
+    `;
+    const [result] = await dbQuery(query1, [id, creatorId, creatorId]);
 
     if (!result) {
       return res.status(404).json({
@@ -1320,23 +1340,23 @@ const orderDelivery = async (req, res) => {
     let query = `
       SELECT
         SUM(c.total_amount) AS totalamount,
-        a.cutomertype,
-        ct.customer_type
+        c.shipping_type,
+        sm.shipping_method AS shipping_method_name
       FROM customer_order a
       LEFT JOIN bill c ON a.order_id = c.order_id
-      LEFT JOIN customer_type ct ON ct. customer_type_id=a.cutomertype
+      LEFT JOIN shipping_method sm ON c.shipping_type = sm.ship_id
       WHERE a.order_status = 4
         AND a.created_by = ?
     `;
- 
+
     const queryParams = [creatorId];
- 
+
     if (start_date && end_date) {
       query += ` AND a.order_date BETWEEN ? AND ?`;
       queryParams.push(start_date, end_date);
     }
- 
-    query += ` GROUP BY a.cutomertype`;
+
+    query += ` GROUP BY c.shipping_type`;
  
     // Step 3: Execute query
     const results = await dbQuery(query, queryParams);

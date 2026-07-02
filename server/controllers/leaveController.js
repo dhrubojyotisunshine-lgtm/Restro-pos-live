@@ -61,71 +61,72 @@ const createHoliday = (req, res) => {
 };
 const updateHoliday = (req, res) => {
   const { id } = req.params;
-  const { holiday_name, start_date, end_date, no_of_days, created_by } = req.body;
+  const { holiday_name, start_date, end_date, no_of_days } = req.body;
   const updated_by = req.id;
- 
-  const fetchSql = 'SELECT * FROM payroll_holiday WHERE payrl_holi_id = ?';
- 
-  db.pool.query(fetchSql, [id], (fetchErr, fetchData) => {
-    if (fetchErr) {
-      console.error('Database fetch error:', fetchErr);
-      return res.status(500).json({ error: 'Internal Server Error' });
-    }
-    if (fetchData.length === 0) {
-      return res.status(404).json({ success: false, message: 'Holiday not found' });
-    }
- 
-    const currentData = fetchData[0];
- 
-    const updatedData = {
-      holiday_name: holiday_name !== undefined ? holiday_name : currentData.holiday_name,
-      start_date: start_date !== undefined ? start_date : currentData.start_date,
-      end_date: end_date !== undefined ? end_date : currentData.end_date,
-      no_of_days: no_of_days !== undefined ? no_of_days : currentData.no_of_days,
-      created_by: created_by !== undefined ? created_by : currentData.created_by
-    };
- 
-    const updateSql = `
-      UPDATE payroll_holiday
-      SET holiday_name = ?, start_date = ?, end_date = ?, no_of_days = ?, updated_by = ?, created_by = ?
-      WHERE payrl_holi_id = ?
-    `;
- 
-    db.pool.query(updateSql, [
-      updatedData.holiday_name,
-      updatedData.start_date,
-      updatedData.end_date,
-      updatedData.no_of_days,
-      updated_by,
-      updatedData.created_by,
-      id
-    ], (updateErr, result) => {
-      if (updateErr) {
-        console.error('Database update error:', updateErr);
-        return res.status(500).json({ error: 'Internal Server Error' });
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [updated_by], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Internal Server Error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by: uc } = userResult[0];
+    const creatorId = is_admin === 1 ? updated_by : uc;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const fetchSql = "SELECT * FROM payroll_holiday WHERE payrl_holi_id = ? AND created_by = ?";
+    db.pool.query(fetchSql, [id, creatorId], (fetchErr, fetchData) => {
+      if (fetchErr) {
+        console.error("Database fetch error:", fetchErr);
+        return res.status(500).json({ error: "Internal Server Error" });
       }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, message: 'Holiday not found' });
+      if (fetchData.length === 0) {
+        return res.status(404).json({ success: false, message: "Holiday not found" });
       }
-      res.status(200).json({ success: true, message: 'Holiday updated successfully' });
+      const currentData = fetchData[0];
+      const updatedData = {
+        holiday_name: holiday_name !== undefined ? holiday_name : currentData.holiday_name,
+        start_date: start_date !== undefined ? start_date : currentData.start_date,
+        end_date: end_date !== undefined ? end_date : currentData.end_date,
+        no_of_days: no_of_days !== undefined ? no_of_days : currentData.no_of_days,
+        created_by: currentData.created_by,
+      };
+      const updateSql = `UPDATE payroll_holiday SET holiday_name = ?, start_date = ?, end_date = ?, no_of_days = ?, updated_by = ?, created_by = ? WHERE payrl_holi_id = ?`;
+      db.pool.query(updateSql, [updatedData.holiday_name, updatedData.start_date, updatedData.end_date, updatedData.no_of_days, updated_by, updatedData.created_by, id], (updateErr, result) => {
+        if (updateErr) {
+          console.error("Database update error:", updateErr);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Holiday not found" });
+        }
+        res.status(200).json({ success: true, message: "Holiday updated successfully" });
+      });
     });
   });
 };
   
   const deleteHoliday = (req, res) => {
     const { id } = req.params;
-  
-    const sql = 'DELETE FROM payroll_holiday WHERE payrl_holi_id = ?';
-  
-    db.pool.query(sql, [id], (err, result) => {
-      if (err) {
-        console.error('Database deletion error:', err);
-        return res.status(500).json({ error: 'Internal Server Error' });
-      }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, message: 'Holiday not found' });
-      }
-      res.status(200).json({ success: true, message: 'Holiday deleted successfully' });
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ error: "Internal Server Error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const sql = "DELETE FROM payroll_holiday WHERE payrl_holi_id = ? AND created_by = ?";
+      db.pool.query(sql, [id, creatorId], (err, result) => {
+        if (err) {
+          console.error("Database deletion error:", err);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Holiday not found" });
+        }
+        res.status(200).json({ success: true, message: "Holiday deleted successfully" });
+      });
     });
   };
   
@@ -134,20 +135,27 @@ const updateHoliday = (req, res) => {
   
   const getHolidayById = (req, res) => {
     const { id } = req.params;
-  
-    const fetchSql = 'SELECT * FROM payroll_holiday WHERE payrl_holi_id = ?';
-    
-    db.pool.query(fetchSql, [id], (fetchErr, fetchData) => {
-      if (fetchErr) {
-        console.error('Database fetch error:', fetchErr);
-        return res.status(500).json({ error: 'Internal Server Error' });
-      }
-      if (fetchData.length === 0) {
-        return res.status(404).json({ success: false, message: 'Holiday not found' });
-      }
-  
-      // Return the fetched data
-      res.status(200).json({ success: true, data: fetchData[0] });
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ error: "Internal Server Error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const fetchSql = "SELECT * FROM payroll_holiday WHERE payrl_holi_id = ? AND created_by = ?";
+      db.pool.query(fetchSql, [id, creatorId], (fetchErr, fetchData) => {
+        if (fetchErr) {
+          console.error("Database fetch error:", fetchErr);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+        if (fetchData.length === 0) {
+          return res.status(404).json({ success: false, message: "Holiday not found" });
+        }
+        res.status(200).json({ success: true, data: fetchData[0] });
+      });
     });
   };
   
@@ -383,41 +391,41 @@ const insertLeaveType = (res, leave_type, leave_days, created_by) => {
  const updateLeaveType = (req, res) => {
   const { id } = req.params;
   const { leave_type, leave_days } = req.body;
- 
-  const fetchCurrentDataSql = 'SELECT * FROM leave_type WHERE leave_type_id = ?';
-  db.pool.query(fetchCurrentDataSql, [id], (fetchErr, fetchData) => {
-    if (fetchErr) {
-      console.error('Database fetch error:', fetchErr);
-      return res.status(500).json({ success: false, message: 'Internal Server Error' });
-    }
- 
-    if (fetchData.length === 0) {
-      return res.status(404).json({ success: false, message: 'Leave Type record not found' });
-    }
- 
-    const currentData = fetchData[0];
-    const updatedData = {
-      leave_type: leave_type !== undefined ? leave_type : currentData.leave_type,
-      leave_days: leave_days !== undefined ? leave_days : currentData.leave_days,
-    };
- 
-    const updateSql = `
-      UPDATE leave_type
-      SET leave_type = ?, leave_days = ?
-      WHERE leave_type_id = ?
-    `;
- 
-    db.pool.query(updateSql, [updatedData.leave_type, updatedData.leave_days, id], (updateErr, result) => {
-      if (updateErr) {
-        console.error('Database update error:', updateErr);
-        return res.status(500).json({ success: false, message: 'An error occurred during update' });
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Internal Server Error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by: uc } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : uc;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const fetchCurrentDataSql = "SELECT * FROM leave_type WHERE leave_type_id = ? AND created_by = ?";
+    db.pool.query(fetchCurrentDataSql, [id, creatorId], (fetchErr, fetchData) => {
+      if (fetchErr) {
+        console.error("Database fetch error:", fetchErr);
+        return res.status(500).json({ success: false, message: "Internal Server Error" });
       }
- 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, message: 'Leave Type record not found' });
+      if (fetchData.length === 0) {
+        return res.status(404).json({ success: false, message: "Leave Type record not found" });
       }
- 
-      return res.status(200).json({ success: true, message: 'Leave Type updated successfully' });
+      const currentData = fetchData[0];
+      const updatedData = {
+        leave_type: leave_type !== undefined ? leave_type : currentData.leave_type,
+        leave_days: leave_days !== undefined ? leave_days : currentData.leave_days,
+      };
+      const updateSql = `UPDATE leave_type SET leave_type = ?, leave_days = ? WHERE leave_type_id = ?`;
+      db.pool.query(updateSql, [updatedData.leave_type, updatedData.leave_days, id], (updateErr, result) => {
+        if (updateErr) {
+          console.error("Database update error:", updateErr);
+          return res.status(500).json({ success: false, message: "An error occurred during update" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Leave Type record not found" });
+        }
+        return res.status(200).json({ success: true, message: "Leave Type updated successfully" });
+      });
     });
   });
 };
@@ -425,38 +433,53 @@ const insertLeaveType = (res, leave_type, leave_days, created_by) => {
   
   const deleteLeaveType = (req, res) => {
     const { id } = req.params;
-    const sql = 'DELETE FROM leave_type WHERE leave_type_id = ?';
-  
-    db.pool.query(sql, [id], (err, result) => {
-      if (err) {
-        console.error("Database query error: ", err);
-        return res.status(500).json({ error: "Internal Server Error" });
-      }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ success: false, message: 'Leave Type record not found' });
-      }
-      res.status(200).json({ message: "Leave Type deleted successfully" });
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ error: "Internal Server Error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const sql = "DELETE FROM leave_type WHERE leave_type_id = ? AND created_by = ?";
+      db.pool.query(sql, [id, creatorId], (err, result) => {
+        if (err) {
+          console.error("Database query error: ", err);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Leave Type record not found" });
+        }
+        res.status(200).json({ message: "Leave Type deleted successfully" });
+      });
     });
   };
   // Get Leave Type by ID
   const getLeaveTypeById = (req, res) => {
-    const { id } = req.params; // Extracting ID from request parameters
-  
-    const getLeaveTypeSql = 'SELECT * FROM leave_type WHERE leave_type_id = ?';
-  
-    // Execute the query
-    db.pool.query(getLeaveTypeSql, [id], (err, data) => {
-      if (err) {
-        console.error('Database query error:', err);
-        return res.status(500).json({ error: 'Internal Server Error' });
-      }
-  
-      if (data.length === 0) {
-        return res.status(404).json({ success: false, message: 'Leave Type record not found' });
-      }
-  
-      // Send the leave type data if found
-      res.status(200).json({ success: true, data: data[0] });
+    const { id } = req.params;
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ error: "Internal Server Error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const getLeaveTypeSql = "SELECT * FROM leave_type WHERE leave_type_id = ? AND created_by = ?";
+      db.pool.query(getLeaveTypeSql, [id, creatorId], (err, data) => {
+        if (err) {
+          console.error("Database query error:", err);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+        if (data.length === 0) {
+          return res.status(404).json({ success: false, message: "Leave Type record not found" });
+        }
+        res.status(200).json({ success: true, data: data[0] });
+      });
     });
   };
   // leave application api
@@ -680,86 +703,99 @@ const getLeaveApplies = (req, res) => {
 
 const getLeaveApplyById = (req, res) => {
   const leave_apply_id = req.params.id;
- 
-  // SQL query with concatenation of first name and last name
-  const sql = `
-      SELECT la.employee_id, la.leave_appl_id,
-             CONCAT(eh.first_name, ' ', eh.last_name) AS employee_name,
-             la.apply_strt_date, la.apply_end_date,
-             la.apply_day, la.leave_type_id, lt.leave_type, la.reason,
-             eh.emp_his_id, la.approved_by,
-             CONCAT(u.firstname, ' ', u.lastname) AS approved_by_name,
-             la.created_by
-      FROM leave_apply la
-      LEFT JOIN employee_history eh ON la.employee_id = eh.emp_his_id
-      LEFT JOIN leave_type lt ON la.leave_type_id = lt.leave_type_id
-      LEFT JOIN user u ON u.id = la.approved_by
-      WHERE la.leave_appl_id = ?
-  `;
- 
-  // Database query
-  db.pool.query(sql, [leave_apply_id], (err, data) => {
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Internal Server Error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const sql = `
+        SELECT la.employee_id, la.leave_appl_id,
+               CONCAT(eh.first_name, ' ', eh.last_name) AS employee_name,
+               la.apply_strt_date, la.apply_end_date,
+               la.apply_day, la.leave_type_id, lt.leave_type, la.reason,
+               eh.emp_his_id, la.approved_by,
+               CONCAT(u.firstname, ' ', u.lastname) AS approved_by_name,
+               la.created_by
+        FROM leave_apply la
+        LEFT JOIN employee_history eh ON la.employee_id = eh.emp_his_id
+        LEFT JOIN leave_type lt ON la.leave_type_id = lt.leave_type_id
+        LEFT JOIN user u ON u.id = la.approved_by
+        WHERE la.leave_appl_id = ? AND la.created_by = ?
+    `;
+    db.pool.query(sql, [leave_apply_id, creatorId], (err, data) => {
       if (err) {
-          console.error('Error fetching leave application by ID:', err);
-          return res.status(500).json({ error: 'Internal Server Error' });
+        console.error("Error fetching leave application by ID:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
       }
- 
-      console.log("data", data);
- 
-      // Respond with the result
+      if (data.length === 0) {
+        return res.status(404).json({ success: false, message: "Leave application not found" });
+      }
       res.status(200).json({ data: data });
+    });
   });
 };
 
 
 const deleteLeaveApply = (req, res) => {
     const leave_apply_id = req.params.id;
+    const userId = req.id;
 
-    const sql = `DELETE FROM leave_apply WHERE leave_appl_id = ?`;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ error: "Internal Server Error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    db.pool.query(sql, [leave_apply_id], (err, result) => {
+      const sql = "DELETE FROM leave_apply WHERE leave_appl_id = ? AND created_by = ?";
+      db.pool.query(sql, [leave_apply_id, creatorId], (err, result) => {
         if (err) {
-            console.error('Error deleting leave application:', err);
-            return res.status(500).json({ error: 'Internal Server Error' });
+          console.error("Error deleting leave application:", err);
+          return res.status(500).json({ error: "Internal Server Error" });
         }
-
         if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Leave application not found' });
+          return res.status(404).json({ message: "Leave application not found" });
         }
-
-        res.status(200).json({ message: 'Leave application deleted successfully' });
+        res.status(200).json({ message: "Leave application deleted successfully" });
+      });
     });
 };
 const updateLeaveApply = (req, res) => {
   const leave_apply_id = req.params.id;
-  const {
-    emp_his_id, leave_type_id, apply_strt_date, apply_end_date, apply_day,
-      reason, approved_by,created_by
-  } = req.body;
- 
-  const sql = `
-      UPDATE leave_apply
-      SET employee_id = ?, leave_type_id = ?, apply_strt_date = ?, apply_end_date = ?, apply_day = ?,
-          reason = ?, approved_by = ?,created_by=?
-      WHERE leave_appl_id = ?
-  `;
- 
-  const values = [
-    emp_his_id, leave_type_id, apply_strt_date, apply_end_date, apply_day,
-      reason, approved_by, created_by, leave_apply_id
-  ];
- 
-  db.pool.query(sql, values, (err, result) => {
-      if (err) {
-          console.error('Error updating leave application:', err);
-          return res.status(500).json({ error: 'Internal Server Error' });
-      }
- 
-      if (result.affectedRows === 0) {
-          return res.status(404).json({ message: 'Leave application not found' });
-      }
- 
-      res.status(200).json({ message: 'Leave application updated successfully' });
+  const { emp_his_id, leave_type_id, apply_strt_date, apply_end_date, apply_day, reason, approved_by } = req.body;
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Internal Server Error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by: uc } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : uc;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const ownerCheckQuery = "SELECT created_by FROM leave_apply WHERE leave_appl_id = ? AND created_by = ?";
+    db.pool.query(ownerCheckQuery, [leave_apply_id, creatorId], (err, rows) => {
+      if (err) return res.status(500).json({ error: "Internal Server Error" });
+      if (!rows.length) return res.status(404).json({ message: "Leave application not found" });
+
+      const sql = `UPDATE leave_apply SET employee_id = ?, leave_type_id = ?, apply_strt_date = ?, apply_end_date = ?, apply_day = ?, reason = ?, approved_by = ?, created_by = ? WHERE leave_appl_id = ?`;
+      db.pool.query(sql, [emp_his_id, leave_type_id, apply_strt_date, apply_end_date, apply_day, reason, approved_by, rows[0].created_by, leave_apply_id], (err, result) => {
+        if (err) {
+          console.error("Error updating leave application:", err);
+          return res.status(500).json({ error: "Internal Server Error" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ message: "Leave application not found" });
+        }
+        res.status(200).json({ message: "Leave application updated successfully" });
+      });
+    });
   });
 };
   

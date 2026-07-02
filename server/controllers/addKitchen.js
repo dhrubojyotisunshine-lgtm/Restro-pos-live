@@ -161,55 +161,59 @@ const getKitchen = (req, res) => {
 
 const getKitchenById = (req, res) => {
   const kitchenId = req.params.id;
+  const userId = req.id;
 
-  const query = `
-    SELECT *
-    FROM kitchens k
-   
-    WHERE id = ?
-  `;
+  const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(checkUserQuery, [userId], (err, userData) => {
+    if (err) return res.status(500).json({ success: false, message: "Database error" });
+    if (!userData.length) return res.status(404).json({ success: false, message: "User not found" });
 
-  db.pool.query(query, [kitchenId], (err, results) => {
-    if (err) {
-      console.error("Error fetching kitchen:", err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Database error" });
-    }
+    const { is_admin, created_by } = userData[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
 
-    if (results.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Kitchen not found" });
-    }
-
-    res.status(200).json(results[0]);
+    const query = "SELECT * FROM kitchens WHERE id = ? AND created_by = ?";
+    db.pool.query(query, [kitchenId, creatorId], (err, results) => {
+      if (err) {
+        console.error("Error fetching kitchen:", err);
+        return res.status(500).json({ success: false, message: "Database error" });
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ success: false, message: "Kitchen not found" });
+      }
+      res.status(200).json(results[0]);
+    });
   });
 };
 
 // Delete Kitchen data
 const deleteKitchenById = (req, res) => {
   const kitchenId = req.params.id;
+  const userId = req.id;
 
-  const query = "DELETE FROM kitchens WHERE id = ?";
+  const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(checkUserQuery, [userId], (err, userData) => {
+    if (err) return res.status(500).json({ success: false, message: "Database error" });
+    if (!userData.length) return res.status(404).json({ success: false, message: "User not found" });
 
-  db.pool.query(query, [kitchenId], (err, result) => {
-    if (err) {
-      console.error("Error deleting kitchen:", err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Database error" });
-    }
+    const { is_admin, created_by } = userData[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
 
-    if (result.affectedRows === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Kitchen not found" });
-    }
+    const checkOwnership = "SELECT id FROM kitchens WHERE id = ? AND created_by = ?";
+    db.pool.query(checkOwnership, [kitchenId, creatorId], (err, owned) => {
+      if (err) return res.status(500).json({ success: false, message: "Database error" });
+      if (!owned.length) return res.status(403).json({ success: false, message: "You are not authorized to delete this kitchen." });
 
-    res
-      .status(200)
-      .json({ success: true, message: "Kitchen deleted successfully" });
+      db.pool.query("DELETE FROM kitchens WHERE id = ?", [kitchenId], (err, result) => {
+        if (err) {
+          console.error("Error deleting kitchen:", err);
+          return res.status(500).json({ success: false, message: "Database error" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Kitchen not found" });
+        }
+        res.status(200).json({ success: true, message: "Kitchen deleted successfully" });
+      });
+    });
   });
 };
 
@@ -219,30 +223,32 @@ const updateKitchenByKitchenId = (req, res) => {
   const kitchenId = req.params.id;
   const { kitchen_name } = req.body;
   console.log("k", kitchen_name);
+  const userId = req.id;
 
-  const query = `
-    UPDATE kitchens
-    SET kitchen_name = ?
-    WHERE id = ?
-  `;
+  const checkUserQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(checkUserQuery, [userId], (err, userData) => {
+    if (err) return res.status(500).json({ success: false, message: "Database error" });
+    if (!userData.length) return res.status(404).json({ success: false, message: "User not found" });
 
-  db.pool.query(query, [kitchen_name, kitchenId], (err, result) => {
-    if (err) {
-      console.error("Error updating kitchen:", err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Database error" });
-    }
+    const { is_admin, created_by } = userData[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
 
-    if (result.affectedRows === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Kitchen not found" });
-    }
+    const checkOwnership = "SELECT id FROM kitchens WHERE id = ? AND created_by = ?";
+    db.pool.query(checkOwnership, [kitchenId, creatorId], (err, owned) => {
+      if (err) return res.status(500).json({ success: false, message: "Database error" });
+      if (!owned.length) return res.status(403).json({ success: false, message: "You are not authorized to update this kitchen." });
 
-    res
-      .status(200)
-      .json({ success: true, message: "Kitchen updated successfully" });
+      db.pool.query("UPDATE kitchens SET kitchen_name = ? WHERE id = ?", [kitchen_name, kitchenId], (err, result) => {
+        if (err) {
+          console.error("Error updating kitchen:", err);
+          return res.status(500).json({ success: false, message: "Database error" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Kitchen not found" });
+        }
+        res.status(200).json({ success: true, message: "Kitchen updated successfully" });
+      });
+    });
   });
 };
 

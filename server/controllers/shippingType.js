@@ -156,60 +156,92 @@ const getAllShippingMethods = (req, res) => {
   const deleteShippingMethod = async (req, res) => {
     try {
       const { id } = req.params;
-      const query = 'DELETE FROM shipping_method WHERE ship_id = ?';
-      db.pool.query(query, [id], (err, result) => {
-        if (err) {
-          console.error(err);
-          res.status(500).json({ success: false, message: 'Failed to delete shipping method' });
-        } else {
-          res.status(200).json({ success: true, message: 'Shipping method deleted successfully' });
-        }
+      const userId = req.id;
+      const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+      db.pool.query(userQuery, [userId], (err, userResult) => {
+        if (err) return res.status(500).json({ success: false, message: "Server error" });
+        if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+        const { is_admin, created_by } = userResult[0];
+        const creatorId = is_admin === 1 ? userId : created_by;
+        if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+        const query = "DELETE FROM shipping_method WHERE ship_id = ? AND created_by = ?";
+        db.pool.query(query, [id, creatorId], (err, result) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ success: false, message: "Failed to delete shipping method" });
+          }
+          if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: "Shipping method not found" });
+          }
+          res.status(200).json({ success: true, message: "Shipping method deleted successfully" });
+        });
       });
     } catch (error) {
-      res.status(500).json({ success: false, message: 'An unexpected error occurred' });
+      res.status(500).json({ success: false, message: "An unexpected error occurred" });
     }
   };
 const getShippingMethodById = async (req, res) => {
   try {
     const { id } = req.params;
-    const query = 'SELECT * FROM shipping_method WHERE ship_id = ?';
-    db.pool.query(query, [id], (err, results) => {
-      if (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: 'Failed to fetch shipping method' });
-      } else if (results.length === 0) {
-        res.status(404).json({ success: false, message: 'Shipping method not found' });
-      } else {
-        res.status(200).json({ success: true, data: results[0] });
-      }
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const query = "SELECT * FROM shipping_method WHERE ship_id = ? AND created_by = ?";
+      db.pool.query(query, [id, creatorId], (err, results) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ success: false, message: "Failed to fetch shipping method" });
+        } else if (results.length === 0) {
+          return res.status(404).json({ success: false, message: "Shipping method not found" });
+        } else {
+          return res.status(200).json({ success: true, data: results[0] });
+        }
+      });
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'An unexpected error occurred' });
+    res.status(500).json({ success: false, message: "An unexpected error occurred" });
   }
 };
 
 const updateShippingMethod = async (req, res) => {
   try {
     const { id } = req.params;
-    const { shipping_method, shippingrate, is_active, created_by } = req.body;
- 
-    const query = `
-      UPDATE shipping_method
-      SET shipping_method = ?, shippingrate = ?, is_active = ?, created_by = ?
-      WHERE ship_id = ?
-    `;
- 
-    // Make sure the parameters order matches placeholders
-    db.pool.query(query, [shipping_method, shippingrate, is_active, created_by, id], (err, result) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ success: false, message: 'Failed to update shipping method' });
-      }
-      res.status(200).json({ success: true, message: 'Shipping method updated successfully' });
+    const { shipping_method, shippingrate, is_active } = req.body;
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by: uc } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : uc;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const ownerCheckQuery = "SELECT created_by FROM shipping_method WHERE ship_id = ? AND created_by = ?";
+      db.pool.query(ownerCheckQuery, [id, creatorId], (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: "Server error" });
+        if (!rows.length) return res.status(404).json({ success: false, message: "Shipping method not found" });
+
+        const query = `UPDATE shipping_method SET shipping_method = ?, shippingrate = ?, is_active = ?, created_by = ? WHERE ship_id = ?`;
+        db.pool.query(query, [shipping_method, shippingrate, is_active, rows[0].created_by, id], (err, result) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ success: false, message: "Failed to update shipping method" });
+          }
+          res.status(200).json({ success: true, message: "Shipping method updated successfully" });
+        });
+      });
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ success: false, message: 'An unexpected error occurred' });
+    res.status(500).json({ success: false, message: "An unexpected error occurred" });
   }
 };
   module.exports={

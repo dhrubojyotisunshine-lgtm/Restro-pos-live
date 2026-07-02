@@ -182,11 +182,11 @@ const verifyToken = async (req, res, next) => {
       return next();
     }
 
-    // ✅ Fetch latest plan
+    // ✅ Fetch latest approved plan only (pending/superseded rows must not interfere)
     const planQuery = `
       SELECT start_date, end_date, package_status
       FROM superadmin_user_plans
-      WHERE user_id = ?
+      WHERE user_id = ? AND package_status = 'approved'
       ORDER BY user_plan_id DESC
       LIMIT 1
     `;
@@ -199,11 +199,6 @@ const verifyToken = async (req, res, next) => {
 
     const now = new Date();
     const endDate = new Date(plan.end_date);
-
-    // ❌ Not approved
-    if (plan.package_status.toLowerCase() !== "approved") {
-      return res.status(403).json({ message: "Your subscription is not approved yet." });
-    }
 
     // ❌ Expired plan → block all API access
     if (endDate < now) {

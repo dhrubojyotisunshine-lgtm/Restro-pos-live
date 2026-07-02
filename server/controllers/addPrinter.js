@@ -230,82 +230,86 @@ const getPrinters = (req, res) => {
 
 const getPrinterById = (req, res) => {
   const printerId = req.params.id;
+  const userId = req.id;
 
   if (isNaN(printerId)) {
     return res.status(400).json({ message: "Invalid printer ID" });
   }
 
-  const query = `SELECT * FROM printer_list WHERE id = ? `;
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-  db.pool.query(query, [printerId], (err, results) => {
-    if (err) {
-      return res.status(500).json({ message: "Database error", error: err });
-    }
-
-    if (results.length === 0) {
-      return res.status(404).json({ message: "Printer not found" });
-    }
-
-    return res.status(200).json({ printer: results[0] });
+    const query = "SELECT * FROM printer_list WHERE id = ? AND created_by = ?";
+    db.pool.query(query, [printerId, creatorId], (err, results) => {
+      if (err) {
+        return res.status(500).json({ message: "Database error", error: err });
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Printer not found" });
+      }
+      return res.status(200).json({ printer: results[0] });
+    });
   });
 };
 
 const updatePrinter = (req, res) => {
   const printerId = req.params.id;
   const { printer_name, printer_type, printer_path, kitchen_id } = req.body;
+  const userId = req.id;
 
-  const query = `
-    UPDATE printer_list
-    SET printer_name = ?, printer_type = ?, printer_path = ?, kitchen_id=?
-    WHERE id = ?
-  `;
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-  db.pool.query(
-    query,
-    [printer_name, printer_type, printer_path, kitchen_id, printerId],
-    (err, result) => {
-      if (err) {
-        console.error("Error updating printer:", err);
-        return res
-          .status(500)
-          .json({ success: false, message: "Database error" });
-      }
+    const ownerCheckQuery = "SELECT id FROM printer_list WHERE id = ? AND created_by = ?";
+    db.pool.query(ownerCheckQuery, [printerId, creatorId], (err, rows) => {
+      if (err) return res.status(500).json({ success: false, message: "Database error" });
+      if (!rows.length) return res.status(404).json({ success: false, message: "Printer not found" });
 
-      if (result.affectedRows === 0) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Printer not found" });
-      }
-
-      res
-        .status(200)
-        .json({ success: true, message: "Printer updated successfully" });
-    },
-  );
+      const query = `UPDATE printer_list SET printer_name = ?, printer_type = ?, printer_path = ?, kitchen_id = ? WHERE id = ?`;
+      db.pool.query(query, [printer_name, printer_type, printer_path, kitchen_id, printerId], (err, result) => {
+        if (err) {
+          console.error("Error updating printer:", err);
+          return res.status(500).json({ success: false, message: "Database error" });
+        }
+        res.status(200).json({ success: true, message: "Printer updated successfully" });
+      });
+    });
+  });
 };
 
 const deletePrinter = (req, res) => {
   const printerId = req.params.id;
+  const userId = req.id;
 
-  const query = "DELETE FROM printer_list WHERE id = ?";
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-  db.pool.query(query, [printerId], (err, result) => {
-    if (err) {
-      console.error("Error deleting printer:", err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Database error" });
-    }
-
-    if (result.affectedRows === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Printer not found" });
-    }
-
-    res
-      .status(200)
-      .json({ success: true, message: "Printer deleted successfully" });
+    const query = "DELETE FROM printer_list WHERE id = ? AND created_by = ?";
+    db.pool.query(query, [printerId, creatorId], (err, result) => {
+      if (err) {
+        console.error("Error deleting printer:", err);
+        return res.status(500).json({ success: false, message: "Database error" });
+      }
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: "Printer not found" });
+      }
+      res.status(200).json({ success: true, message: "Printer deleted successfully" });
+    });
   });
 };
 

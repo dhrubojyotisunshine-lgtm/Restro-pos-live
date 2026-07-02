@@ -1,4 +1,5 @@
 const db = require("../utils/db");
+const crypto = require("crypto");
 
 const createTable = (req, res) => {
   const { tablename, person_capicity, floorName } = req.body;
@@ -52,12 +53,13 @@ const createTable = (req, res) => {
 
   function insertTable(created_by) {
     const createTableQuery = `
-    INSERT INTO rest_table 
-    (tablename, person_capicity, floor, status, created_by, occupied_seats)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO rest_table
+    (uuid, tablename, person_capicity, floor, status, created_by, occupied_seats)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
 
     const values = [
+      crypto.randomUUID(),
       tablename,
       person_capicity,
       floorName,
@@ -264,22 +266,23 @@ const syncTables = async (req, res) => {
 
 const getBookedTable = async (req, res) => {
   try {
-    const getBookedTableQuery = `
-      SELECT *
-      FROM rest_table
-      WHERE rest_table.status = 1
-    `;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    db.pool.query(getBookedTableQuery, (err, results) => {
-      if (err) {
-        console.error(err);
-        res.status(500).json({
-          success: false,
-          message: "An error occurred while retrieving tables",
-        });
-      } else {
+      const getBookedTableQuery = `SELECT * FROM rest_table WHERE status = 1 AND created_by = ?`;
+      db.pool.query(getBookedTableQuery, [creatorId], (err, results) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ success: false, message: "An error occurred while retrieving tables" });
+        }
         res.status(200).json({ success: true, data: results });
-      }
+      });
     });
   } catch (error) {
     console.error(error);
@@ -289,22 +292,23 @@ const getBookedTable = async (req, res) => {
 
 const getunBookedTable = async (req, res) => {
   try {
-    const getUnBookedTableQuery = `
-      SELECT *
-      FROM rest_table
-      WHERE rest_table.status = 0
-    `;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    db.pool.query(getUnBookedTableQuery, (err, results) => {
-      if (err) {
-        console.error(err);
-        res.status(500).json({
-          success: false,
-          message: "An error occurred while retrieving tables",
-        });
-      } else {
+      const getUnBookedTableQuery = `SELECT * FROM rest_table WHERE status = 0 AND created_by = ?`;
+      db.pool.query(getUnBookedTableQuery, [creatorId], (err, results) => {
+        if (err) {
+          console.error(err);
+          return res.status(500).json({ success: false, message: "An error occurred while retrieving tables" });
+        }
         res.status(200).json({ success: true, data: results });
-      }
+      });
     });
   } catch (error) {
     console.error(error);
@@ -314,40 +318,49 @@ const getunBookedTable = async (req, res) => {
 
 const cleartable = async (req, res) => {
   const tableId = req.params.tableId;
-  const clearTableQuery = `UPDATE rest_table SET status = 0 WHERE tableid = ?`;
+  const userId = req.id;
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-  db.pool.query(clearTableQuery, tableId, (err, results) => {
-    if (err) {
-      console.log(err);
-      res.status(500).json({
-        success: false,
-        message: "An error occurred while clearing the table",
-      });
-    } else {
-      res
-        .status(200)
-        .json({ success: true, message: "Table cleared successfully" });
-    }
+    const clearTableQuery = `UPDATE rest_table SET status = 0 WHERE tableid = ? AND created_by = ?`;
+    db.pool.query(clearTableQuery, [tableId, creatorId], (err, results) => {
+      if (err) {
+        console.log(err);
+        return res.status(500).json({ success: false, message: "An error occurred while clearing the table" });
+      }
+      res.status(200).json({ success: true, message: "Table cleared successfully" });
+    });
   });
 };
 
 const deleteTable = async (req, res) => {
   try {
-    const tableId = req.params.id; // Assuming the table ID is passed as a URL parameter
+    const tableId = req.params.id;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    const deleteTableQuery = `
-      DELETE FROM rest_table WHERE tableid = ?
-    `;
-
-    db.pool.query(deleteTableQuery, [tableId], (err, result) => {
-      if (err) {
-        console.log(err);
-        res.status(500).json({ success: false, message: "An error occurred" });
-      } else {
-        res
-          .status(200)
-          .json({ success: true, message: "Table deleted successfully" });
-      }
+      const deleteTableQuery = `DELETE FROM rest_table WHERE tableid = ? AND created_by = ?`;
+      db.pool.query(deleteTableQuery, [tableId, creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).json({ success: false, message: "An error occurred" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Table not found" });
+        }
+        res.status(200).json({ success: true, message: "Table deleted successfully" });
+      });
     });
   } catch (error) {
     res.status(500).json({ error: "An error occurred" });
@@ -359,41 +372,33 @@ const getTableById = async (req, res) => {
     const { id } = req.params;
 
     if (!id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Table ID is required" });
+      return res.status(400).json({ success: false, message: "Table ID is required" });
     }
 
-    const getTableByIdQuery = `
-      SELECT tableid, tablename, person_capicity, status,floor
-      FROM rest_table
-      WHERE tableid = ?
-    `;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    db.pool.query(getTableByIdQuery, [id], (err, result) => {
-      if (err) {
-        console.log(err);
-        return res.status(500).json({
-          success: false,
-          message: "An error occurred while retrieving the table",
-        });
-      }
-
-      if (result.length === 0) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Table not found" });
-      }
-
-      const table = {
-        ...result[0],
-        status: result[0].status === 1 ? "booked" : "free",
-      };
-
-      res.status(200).json({
-        success: true,
-        data: table,
-        message: "Table fetched successfully",
+      const getTableByIdQuery = `
+        SELECT tableid, tablename, person_capicity, status, floor
+        FROM rest_table
+        WHERE tableid = ? AND created_by = ?
+      `;
+      db.pool.query(getTableByIdQuery, [id, creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).json({ success: false, message: "An error occurred while retrieving the table" });
+        }
+        if (result.length === 0) {
+          return res.status(404).json({ success: false, message: "Table not found" });
+        }
+        const table = { ...result[0], status: result[0].status === 1 ? "booked" : "free" };
+        res.status(200).json({ success: true, data: table, message: "Table fetched successfully" });
       });
     });
   } catch (error) {
@@ -407,9 +412,17 @@ const updateTable = (req, res) => {
   try {
     const { tableid } = req.params;
     const { tablename, person_capicity, floorName } = req.body;
+    const userId = req.id;
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by: uc } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : uc;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    const fetchCurrentDataSql = "SELECT * FROM rest_table WHERE tableid = ?";
-    db.pool.query(fetchCurrentDataSql, [tableid], (fetchErr, fetchData) => {
+    const fetchCurrentDataSql = "SELECT * FROM rest_table WHERE tableid = ? AND created_by = ?";
+    db.pool.query(fetchCurrentDataSql, [tableid, creatorId], (fetchErr, fetchData) => {
       if (fetchErr) {
         console.error("Database fetch error:", fetchErr);
         return res
@@ -470,6 +483,7 @@ const updateTable = (req, res) => {
         },
       );
     });
+    }); // close userQuery callback
   } catch (error) {
     console.error("Unexpected error:", error);
     return res

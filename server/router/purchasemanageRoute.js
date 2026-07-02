@@ -6,24 +6,26 @@ const auth=require("../middleware/authicantejwt")
 //add purchase
 router.post("/addPurchaseItem", auth,purchaseController.createPurchaseItem);
 router.get('/purchaseitem',auth,purchaseController.getPurchaseItemDetails);
-router.get('/getupdate/:id',purchaseController.getPurchaseItemById);
-router.put('/updatedata/:purchaseid',purchaseController.updatePurchaseItem);
+router.get('/getupdate/:id', auth, purchaseController.getPurchaseItemById);
+router.put('/updatedata/:purchaseid', auth, purchaseController.updatePurchaseItem);
 // router.put('/update/:purchaseid',purchaseController.updatePurchaseItem)
+router.post('/purchase/:purchaseid/payment', auth, purchaseController.addPurchasePayment);
+router.get('/purchase/:purchaseid/history', auth, purchaseController.getPurchaseHistory);
 //PURCHASE RETURN
 router.get('/purchasereturns', auth,purchaseController.getReturnpurchase);
-router.get('/purchasereturns/:id', purchaseController.getReturnItemInfoByID);
+router.get('/purchasereturns/:id', auth, purchaseController.getReturnItemInfoByID);
 //PURCHASE RETURN ACCOURDING TO THAT SUPPLIER AND INVOICE
-router.get('/purchasereturnsearch', purchaseController.fetchInvoiceIdThroughSupplier);
+router.get('/purchasereturnsearch', auth, purchaseController.fetchInvoiceIdThroughSupplier);
 // post return
 router.post('/returnitem',auth,purchaseController.purReturnInsert)
-router.get('/purchasereturn', purchaseController.invoiceBySupplier);
+router.get('/purchasereturn', auth, purchaseController.invoiceBySupplier);
 
 // get all suppliers
 router.get('/suppliers',auth,purchaseController.getAllSuppliers);
-router.post('/suppliers',auth,purchaseController.createSupplier); 
-router.delete('/suppliers/:id',purchaseController.deleteSupplier)
-router.get('/suppliers/:id',purchaseController.getSupplierById)
-router.put('/suppliers/:id', purchaseController.updateSupplier); 
+router.post('/suppliers',auth,purchaseController.createSupplier);
+router.delete('/suppliers/:id', auth, purchaseController.deleteSupplier)
+router.get('/suppliers/:id', auth, purchaseController.getSupplierById)
+router.put('/suppliers/:id', auth, purchaseController.updateSupplier);
 
 // get out of stock
 router.get('/stock', auth,purchaseController.stockOutIngredients);
@@ -31,5 +33,5 @@ router.get('/stock', auth,purchaseController.stockOutIngredients);
 
 router.get("/getIngredient",auth,purchaseController.getAllStockIngredients)
 // get supplier ledger data
-router.get('/supplierledger',purchaseController.getPurchaseTransactions);
+router.get('/supplierledger', auth, purchaseController.getPurchaseTransactions);
 module.exports = router;

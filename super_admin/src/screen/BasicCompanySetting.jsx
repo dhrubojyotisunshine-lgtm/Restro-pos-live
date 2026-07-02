@@ -46,14 +46,13 @@ const BasicCompanySetting = () => {
 
   useEffect(() => {
     axios
-      .get("https://krayon.softwarestesting.co.in/api/countries1")
-      .then((res) => setCountries(res.data.data || [])) // Ensure we always have an array
+      .get(`${API_BASE_URL}/countries1`)
+      .then((res) => setCountries(res.data.data || []))
       .catch((err) => {
         console.error("Error fetching countries:", err);
-        setCountries([]); // Set to empty array on error
+        setCountries([]);
       });
-    // .get(`${API_BASE_URL}/symbol`)
-    axios.get( "https://krayon.softwarestesting.co.in/api/symbol")
+    axios.get(`${API_BASE_URL}/symbol`)
       .then((res) => setCurrencies(res.data.data || []))
       .catch((err) => {
         console.error("Error fetching currencies:", err);
@@ -61,7 +60,7 @@ const BasicCompanySetting = () => {
       });
 
     axios
-      .get("https://krayon.softwarestesting.co.in/api/timezone")
+      .get(`${API_BASE_URL}/timezone`)
       .then((res) => setTimezones(res.data.data || []))
       .catch((err) => {
         console.error("Error fetching timezones:", err);

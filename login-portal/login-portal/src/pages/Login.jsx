@@ -6,6 +6,7 @@ import fallback from "../assets/Group 206124.png";
 const Login = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const VITE_IMG_URL = import.meta.env.VITE_IMG_URL;
+  const APP_URL = import.meta.env.VITE_APP_URL;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -48,13 +49,22 @@ const Login = () => {
       if (websitelink) {
         localStorage.setItem("websitelink", websitelink);
       }
+      const params = new URLSearchParams({
+        token,
+        userId,
+        username,
+        isAdmin,
+        superAdmin,
+        planData: JSON.stringify(planData),
+        permData: JSON.stringify(permData),
+      });
+
       if (planExpired) {
-        window.location.href =
-          "https://krayon.softwarestesting.co.in/my-subscription";
+        window.location.href = `${APP_URL.replace("/frontend/", "/my-subscription")}?${params}`;
       } else if (superAdmin && websitelink) {
-        window.location.href = websitelink;
+        window.location.href = `${websitelink}?${params}`;
       } else {
-        window.location.href = "https://krayon.softwarestesting.co.in/frontend";
+        window.location.href = `${APP_URL}?${params}`;
       }
     } catch (error) {
       toast.error(

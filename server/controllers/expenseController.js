@@ -219,8 +219,14 @@ const postExpenseIten = (req, res) => {
 const deleteExpenseItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const sql = `DELETE FROM expense_item WHERE id = ?`;
-    await dbQuery(sql, [id]);
+    const userId = req.id;
+    const [userData] = await dbQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [userId]);
+    if (!userData) return res.status(404).json({ success: false, message: "User not found" });
+    const creatorId = userData.is_admin === 1 ? userId : userData.created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const result = await dbQuery("DELETE FROM expense_item WHERE id = ? AND created_by = ?", [id, creatorId]);
+    if (result.affectedRows === 0) return res.status(404).json({ message: "Expense item not found" });
     res.status(200).json({ message: "Successfully Deleted" });
   } catch (err) {
     console.error("Database query error:", err);
@@ -229,11 +235,15 @@ const deleteExpenseItem = async (req, res) => {
 };
 const getExpenseItemById = async (req, res) => {
   const { id } = req.params;
+  const userId = req.id;
 
   try {
-    const sql = `SELECT * FROM expense_item WHERE id = ?`;
-    const result = await dbQuery(sql, [id]);
+    const [userData] = await dbQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [userId]);
+    if (!userData) return res.status(404).json({ success: false, message: "User not found" });
+    const creatorId = userData.is_admin === 1 ? userId : userData.created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
+    const result = await dbQuery("SELECT * FROM expense_item WHERE id = ? AND created_by = ?", [id, creatorId]);
     if (result.length > 0) {
       res.status(200).json({ data: result[0] });
     } else {
@@ -247,17 +257,27 @@ const getExpenseItemById = async (req, res) => {
 
 const updateExpenseItem = async (req, res) => {
   const { id } = req.params;
-  const { expense_item_name, created_by } = req.body;
+  const { expense_item_name } = req.body;
+  const userId = req.id;
 
-  const sql = `UPDATE expense_item SET expense_item_name = ?,created_by=? WHERE id = ?`;
-  const result = await dbQuery(sql, [expense_item_name, created_by, id]);
+  try {
+    const [userData] = await dbQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [userId]);
+    if (!userData) return res.status(404).json({ success: false, message: "User not found" });
+    const creatorId = userData.is_admin === 1 ? userId : userData.created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-  if (result.affectedRows > 0) {
-    res.status(200).json({ message: "Expense item updated successfully" });
-  } else {
-    res
-      .status(404)
-      .json({ message: "Expense item not found or no changes made" });
+    const [existing] = await dbQuery("SELECT created_by FROM expense_item WHERE id = ? AND created_by = ?", [id, creatorId]);
+    if (!existing) return res.status(404).json({ message: "Expense item not found" });
+
+    const result = await dbQuery("UPDATE expense_item SET expense_item_name = ?, created_by = ? WHERE id = ?", [expense_item_name, existing.created_by, id]);
+    if (result.affectedRows > 0) {
+      res.status(200).json({ message: "Expense item updated successfully" });
+    } else {
+      res.status(404).json({ message: "Expense item not found or no changes made" });
+    }
+  } catch (err) {
+    console.error("Database query error:", err);
+    res.status(500).json({ message: "An error occurred" });
   }
 };
 
@@ -455,40 +475,26 @@ const createExpense = async (req, res) => {
 };
 const deleteExpense = async (req, res) => {
   const voucher_no = req.params.id;
-
-  // SQL query to delete an expense
-  const sql = `
-    DELETE FROM expense WHERE voucher_no = ?
-  `;
+  const userId = req.id;
 
   try {
-    // Execute the delete query
-    const result = await dbQuery(sql, [voucher_no]);
+    const [userData] = await dbQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [userId]);
+    if (!userData) return res.status(404).json({ success: false, message: "User not found" });
+    const creatorId = userData.is_admin === 1 ? userId : userData.created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
+    const result = await dbQuery("DELETE FROM expense WHERE voucher_no = ? AND created_by = ?", [voucher_no, creatorId]);
     if (result.affectedRows === 0) {
-      // If no rows were affected, the voucher_no might not exist
-      return res
-        .status(404)
-        .json({ success: false, message: "Expense not found" });
+      return res.status(404).json({ success: false, message: "Expense not found" });
     }
 
-    // Optionally, you can also delete related transactions from acc_transaction and bank_summary
-    await dbQuery(`DELETE FROM acc_transaction WHERE VNo = ?`, [voucher_no]);
-    await dbQuery(`DELETE FROM bank_summary WHERE deposite_id = ?`, [
-      voucher_no,
-    ]);
+    await dbQuery("DELETE FROM acc_transaction WHERE VNo = ?", [voucher_no]);
+    await dbQuery("DELETE FROM bank_summary WHERE deposite_id = ?", [voucher_no]);
 
-    res
-      .status(200)
-      .json({ success: true, message: "Expense deleted successfully" });
+    res.status(200).json({ success: true, message: "Expense deleted successfully" });
   } catch (err) {
     console.error("Error deleting expense:", err);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "An error occurred while deleting the expense",
-      });
+    res.status(500).json({ success: false, message: "An error occurred while deleting the expense" });
   }
 };
 module.exports = {

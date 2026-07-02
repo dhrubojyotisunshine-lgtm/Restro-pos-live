@@ -46,24 +46,33 @@ const getTableBySale = async (req, res) => {
 
 
 const getMenuTypeById = async (req, res) => {
-  const { id } = req.params; // Get the id from the request parameters
+  const { id } = req.params;
+  const userId = req.id;
 
   try {
-    const getMenuTypeByIdQuery = 'SELECT * FROM tbl_menutype WHERE menutypeid = ?'; // Using a placeholder for the id
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    db.pool.query(getMenuTypeByIdQuery, [id], (err, results) => {
-      if (err) {
-        console.error('Database error:', err);
-        res.status(500).json({ success: false, message: 'An error occurred while retrieving the menu type', error: err.message });
-      } else if (results.length === 0) {
-        res.status(404).json({ success: false, message: `Menu type with id ${id} not found` });
-      } else {
-        res.status(200).json({ success: true, data: results[0] }); // Return only the first result
-      }
+      const getMenuTypeByIdQuery = "SELECT * FROM tbl_menutype WHERE menutypeid = ? AND created_by = ?";
+      db.pool.query(getMenuTypeByIdQuery, [id, creatorId], (err, results) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({ success: false, message: "An error occurred while retrieving the menu type", error: err.message });
+        } else if (results.length === 0) {
+          return res.status(404).json({ success: false, message: `Menu type with id ${id} not found` });
+        } else {
+          return res.status(200).json({ success: true, data: results[0] });
+        }
+      });
     });
   } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ success: false, message: 'An error occurred on the server', error: error.message });
+    console.error("Server error:", error);
+    res.status(500).json({ success: false, message: "An error occurred on the server", error: error.message });
   }
 };
 
@@ -226,37 +235,35 @@ const getAllMenuTypes = async (req, res) => {
 const updateMenuType = async (req, res) => {
   try {
     const { menutypeid } = req.params;
-    const { menutype, status, created_by } = req.body;
- 
-    const updateMenuTypeQuery = `
-      UPDATE tbl_menutype
-      SET menutype = ?, status = ?, created_by = ?
-      WHERE menutypeid = ?
-    `;
-    const values = [menutype, status, created_by, menutypeid];
- 
-    db.pool.query(updateMenuTypeQuery, values, (err, result) => {
-      if (err) {
-        console.error("Database error:", err);
-        return res.status(500).json({
-          success: false,
-          message: "An error occurred while updating the menu type",
-          error: err.message,
+    const { menutype, status } = req.body;
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by: uc } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : uc;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const ownerCheckQuery = "SELECT created_by FROM tbl_menutype WHERE menutypeid = ? AND created_by = ?";
+      db.pool.query(ownerCheckQuery, [menutypeid, creatorId], (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: "Server error" });
+        if (!rows.length) return res.status(404).json({ success: false, message: "Menu type not found" });
+
+        const updateMenuTypeQuery = `UPDATE tbl_menutype SET menutype = ?, status = ?, created_by = ? WHERE menutypeid = ?`;
+        db.pool.query(updateMenuTypeQuery, [menutype, status, rows[0].created_by, menutypeid], (err, result) => {
+          if (err) {
+            console.error("Database error:", err);
+            return res.status(500).json({ success: false, message: "An error occurred while updating the menu type", error: err.message });
+          }
+          return res.status(200).json({ success: true, message: "Menu type updated successfully" });
         });
-      } else {
-        return res.status(200).json({
-          success: true,
-          message: "Menu type updated successfully",
-        });
-      }
+      });
     });
   } catch (error) {
     console.error("Server error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "An error occurred on the server",
-      error: error.message,
-    });
+    return res.status(500).json({ success: false, message: "An error occurred on the server", error: error.message });
   }
 };
  
@@ -264,30 +271,31 @@ const updateMenuType = async (req, res) => {
 const deleteMenuType = async (req, res) => {
   try {
     const { id } = req.params;
- 
-    const deleteMenuTypeQuery = "DELETE FROM tbl_menutype WHERE menutypeid = ?";
- 
-    db.pool.query(deleteMenuTypeQuery, [id], (err, result) => {
-      if (err) {
-        console.error("Database error:", err);
-        res.status(500).json({
-          success: false,
-          message: "An error occurred while deleting the menu type",
-          error: err.message,
-        });
-      } else {
-        res
-          .status(200)
-          .json({ success: true, message: "Menu type deleted successfully" });
-      }
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const deleteMenuTypeQuery = "DELETE FROM tbl_menutype WHERE menutypeid = ? AND created_by = ?";
+      db.pool.query(deleteMenuTypeQuery, [id, creatorId], (err, result) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({ success: false, message: "An error occurred while deleting the menu type", error: err.message });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Menu type not found" });
+        }
+        res.status(200).json({ success: true, message: "Menu type deleted successfully" });
+      });
     });
   } catch (error) {
     console.error("Server error:", error);
-    res.status(500).json({
-      success: false,
-      message: "An error occurred on the server",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: "An error occurred on the server", error: error.message });
   }
 };
  

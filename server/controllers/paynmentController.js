@@ -114,11 +114,19 @@ const getPaymentMethods = (req, res) => {
 const makePayment = (req, res) => {
   const { order_id } = req.params;
   const { payment_method_id, paidAmount, discount, service_charge } = req.body;
+  const userId = req.id;
 
   console.log(req.body);
 
-  const checkOrderQuery = "SELECT * FROM customer_order WHERE order_id = ?";
-  db.pool.query(checkOrderQuery, [order_id], (err, orderResult) => {
+  db.pool.query("SELECT is_admin, created_by FROM user WHERE id = ?", [userId], (userErr, userData) => {
+    if (userErr || !userData.length) {
+      return res.status(500).json({ success: false, message: "Internal server error." });
+    }
+    const { is_admin, created_by } = userData[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+
+  const checkOrderQuery = "SELECT * FROM customer_order WHERE order_id = ? AND created_by = ?";
+  db.pool.query(checkOrderQuery, [order_id, creatorId], (err, orderResult) => {
     if (err) {
       console.error("Error checking customer_order:", err);
       return res.status(500).json({ success: false, message: "An error occurred while checking order." });
@@ -194,5 +202,6 @@ const makePayment = (req, res) => {
       });
     });
   });
+  }); // end user lookup
 };
 module.exports = { getPaymentMethods, makePayment };

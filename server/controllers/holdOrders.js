@@ -322,15 +322,15 @@ const draftOrderPlace = (req, res) => {
   const waiterId = waiter_id || 0;
   const tableId = table_id || 0;
  
-  // Get the max order ID
-  const maxOrderIdQuery = "SELECT MAX(order_id) AS maxOrderId FROM customer_order";
-  db.pool.query(maxOrderIdQuery, (err, result) => {
+  // Get the max order ID per company
+  const maxOrderIdQuery = "SELECT MAX(CAST(saleinvoice AS UNSIGNED)) AS maxOrderId FROM customer_order WHERE created_by = ?";
+  db.pool.query(maxOrderIdQuery, [create_by], (err, result) => {
     if (err) {
       console.error("Error getting max order ID:", err);
       return res.status(500).json({ message: "Internal server error" });
     }
- 
-    const maxOrderId = result[0].maxOrderId;
+
+    const maxOrderId = parseInt(result[0].maxOrderId || 0);
     const invoiceId = maxOrderId ? maxOrderId + 1 : 1;
     const isthirdparty = customer_type === 3 ? 3 : 0;
  
@@ -631,9 +631,8 @@ const draftOrderPlace = (req, res) => {
       VAT,
       discount,
       table_id,
-      created_by,
     } = req.body;
- 
+
     if (
       !order_id ||
       !customer_id ||
@@ -643,12 +642,28 @@ const draftOrderPlace = (req, res) => {
     ) {
       return res.status(400).json({ message: "Invalid request data" });
     }
- 
+
     const waiterId = waiter_id || 0;
     const tableId = table_id || 0;
     const isthirdparty = customer_type === 3 ? 3 : 0;
- 
+
     try {
+      const userId = req.id;
+      const userRows = await dbQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [userId]);
+      if (!userRows.length) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const { is_admin, created_by: userCreatedBy } = userRows[0];
+      const creatorId = is_admin === 1 ? userId : userCreatedBy;
+
+      const ownRows = await dbQuery(
+        "SELECT order_id FROM customer_order WHERE order_id = ? AND created_by = ?",
+        [order_id, creatorId]
+      );
+      if (!ownRows.length) {
+        return res.status(403).json({ message: "You are not authorized to update this order." });
+      }
+
       // Update customer_order table
       const updateOrderQuery = `
         UPDATE customer_order
@@ -661,7 +676,7 @@ const draftOrderPlace = (req, res) => {
         waiterId,
         tableId,
         grand_total,
-        created_by,
+        creatorId,
         order_id,
       ]);
  
@@ -733,7 +748,7 @@ const draftOrderPlace = (req, res) => {
         shipping_type,
         VAT || 0.0,
         grand_total,
-        created_by,
+        creatorId,
         order_id,
       ];
       await dbQuery(updateBillQuery, billData);
@@ -857,6 +872,14 @@ const draftOrderPlace = (req, res) => {
    
  
     try {
+        const userId = req.id;
+        const userRows = await dbQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [userId]);
+        if (!userRows.length) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        const { is_admin, created_by: userCreatedBy } = userRows[0];
+        const creatorId = is_admin === 1 ? userId : userCreatedBy;
+
         // Query to fetch order details
         const getOrderDetailsQuery = `
             SELECT
@@ -892,7 +915,7 @@ const draftOrderPlace = (req, res) => {
                 LEFT JOIN bill b ON co.order_id = b.order_id
                 LEFT JOIN shipping_method sm ON b.shipping_type = sm.ship_id
             WHERE
-               co.order_id=?;
+               co.order_id = ? AND co.created_by = ?;
         `;
  
         // Query to fetch menu items associated with the order
@@ -915,7 +938,7 @@ const draftOrderPlace = (req, res) => {
         `;
  
         // Execute first query to get order details
-        db.pool.query(getOrderDetailsQuery,[order_id], (err, orderResult) => {
+        db.pool.query(getOrderDetailsQuery,[order_id, creatorId], (err, orderResult) => {
             if (err) {
                 console.error("Error fetching order details:", err);
                 return res.status(500).json({

@@ -23,360 +23,6 @@ const dbQuery = (query, values) => {
   };
 
 
-
-// const addUser = async (req, res) => {
-//   const body = {};
-//   for (let key in req.body) {
-//     body[key.trim()] = req.body[key];
-//   }
- 
-//   const {
-//     firstname,
-//     lastname,
-//     about = "",
-//     email,
-//     password,
-//     status,
-//     is_admin,
-//     super_admin
-//   } = body;
- 
-//   if (!firstname || !lastname || !email || !password || status === undefined) {
-//     return res.status(400).send({ error: "Missing required fields" });
-//   }
- 
-//   const image = req.file ? req.file.filename : null;
-//   const last_login = new Date().toISOString();
-//   const hashedPassword = await bcrypt.hash(password, 10);
- 
-//   // 🚨 Bypass all checks if user is a superadmin
-//   if (super_admin == 2) {
-//     const insertUserQuery = `
-//       INSERT INTO user (firstname, lastname, about, email, password, image, last_login, last_logout, status, superadmin)
-//       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-//     `;
- 
-//     const values = [
-//       firstname,
-//       lastname,
-//       about,
-//       email,
-//       hashedPassword,
-//       image,
-//       last_login,
-//       null,
-//       status,
-//       super_admin
-//     ];
- 
-//     return db.pool.query(insertUserQuery, values, (err) => {
-//       if (err) return res.status(500).send(err);
-//       return res.status(201).send({ message: "Superadmin user added successfully" });
-//     });
-//   }
- 
-//   // 🔐 Regular user flow (check admin, subscription, etc.)
-//   const id = req.id; // assuming user ID is available from token/session
- 
-//   const checkAdminQuery = "SELECT is_admin FROM user WHERE id = ?";
-//   db.pool.query(checkAdminQuery, [id], (err, adminResults) => {
-//     if (err) return res.status(500).send(err);
- 
-//     if (adminResults.length === 0 || adminResults[0].is_admin !== 1) {
-//       return res.status(403).send({ error: "Only admin can add new users" });
-//     }
- 
-//     const checkSubscriptionQuery = "SELECT * FROM superadmin_user_plans WHERE user_id = ?";
-//     db.pool.query(checkSubscriptionQuery, [id], async (err, subResults) => {
-//       if (err) return res.status(500).send(err);
- 
-//       let subscription_id;
-//       let created_by = id;
- 
-//       if (subResults.length === 0) {
-//         const getCreatorQuery = "SELECT created_by FROM user WHERE id = ?";
-//         db.pool.query(getCreatorQuery, [id], (err, creatorResults) => {
-//           if (err) return res.status(500).send(err);
- 
-//           if (creatorResults.length === 0 || !creatorResults[0].created_by) {
-//             return res.status(403).json({ message: "You are not authorized to add users." });
-//           }
- 
-//           created_by = creatorResults[0].created_by;
- 
-//           db.pool.query(checkSubscriptionQuery, [created_by], (err, creatorSubResults) => {
-//             if (err) return res.status(500).send(err);
- 
-//             if (creatorSubResults.length === 0) {
-//               return res.status(403).json({ message: "Your creator does not have an active subscription." });
-//             }
- 
-//             subscription_id = creatorSubResults[0].plan_id;
-//             proceedToCreateUser();
-//           });
-//         });
-//       } else {
-//         subscription_id = subResults[0].plan_id;
-//         proceedToCreateUser();
-//       }
- 
-//       async function proceedToCreateUser() {
-//         const checkEmailQuery = "SELECT COUNT(*) AS count FROM user WHERE email = ?";
-//         db.pool.query(checkEmailQuery, [email], (err, emailResults) => {
-//           if (err) return res.status(500).send(err);
- 
-//           if (emailResults[0].count > 0) {
-//             return res.status(409).send({ error: "Email already in use" });
-//           }
- 
-//           const getPlanQuery = "SELECT number_of_active_users FROM subscription_plans WHERE plan_id = ?";
-//           db.pool.query(getPlanQuery, [subscription_id], (err, planResults) => {
-//             if (err) return res.status(500).send(err);
- 
-//             if (planResults.length === 0) {
-//               return res.status(404).send({ error: "Subscription plan not found" });
-//             }
- 
-//             const userLimit = planResults[0].number_of_active_users;
- 
-//             const countUsersQuery = "SELECT COUNT(*) AS totalUsers FROM user WHERE created_by = ?";
-//             db.pool.query(countUsersQuery, [created_by], async (err, countResults) => {
-//               if (err) return res.status(500).send(err);
- 
-//               const totalUsers = countResults[0].totalUsers;
-//               if (userLimit > 0 && totalUsers >= userLimit) {
-//                 return res.status(403).send({ error: "User creation limit reached for your plan" });
-//               }
- 
-//               const insertUserQuery = `
-//                 INSERT INTO user (firstname, lastname, about, email, password, image, last_login, last_logout, status, is_admin, subscription_id, created_by)
-//                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-//               `;
-//               const values = [
-//                 firstname,
-//                 lastname,
-//                 about,
-//                 email,
-//                 hashedPassword,
-//                 image,
-//                 last_login,
-//                 null,
-//                 status,
-//                 is_admin,
-//                 subscription_id,
-//                 created_by
-//               ];
- 
-//               db.pool.query(insertUserQuery, values, (err) => {
-//                 if (err) return res.status(500).send(err);
-//                 return res.status(201).send({ message: "User added successfully" });
-//               });
-//             });
-//           });
-//         });
-//       }
-//     });
-//   });
-// };
-
-// const addUser = async (req, res) => {
-//   try {
-//     const body = {};
-//     for (let key in req.body) {
-//       body[key.trim()] = req.body[key];
-//     }
- 
-//     const id = req.id;
-//     const { firstname, lastname, about, email, password, status, is_admin,super_admin } = body;
-//  console.log(req.id)
-//     if (!firstname || !lastname || !email || !password || status === undefined) {
-//       return res.status(400).send({ error: "Missing required fields" });
-//     }
- 
-//     const subscriptionQuery = "SELECT plan_id FROM superadmin_user_plans WHERE user_id = ?";
-//     db.pool.query(subscriptionQuery, [id], (err, subscriptionResult) => {
-//       if (err) return res.status(500).send({ error: "Error fetching subscription", details: err.message });
-//       if (subscriptionResult.length === 0) return res.status(404).send({ error: "Subscription not found" });
- 
-//       const subscription_id = subscriptionResult[0].plan_id;
- 
-//       // Check if email already exists
-//       const checkEmailQuery = "SELECT COUNT(*) AS count FROM user WHERE email = ?";
-//       db.pool.query(checkEmailQuery, [email], (err, result) => {
-//         if (err) return res.status(500).send({ error: "Error checking email", details: err.message });
-//         if (result[0].count > 0) return res.status(409).send({ error: "Email already in use" });
- 
-//         const getSubscriptionQuery = "SELECT * FROM subscription_plans WHERE plan_id = ?";
-//         db.pool.query(getSubscriptionQuery, [subscription_id], (err, subscriptionData) => {
-//           if (err) return res.status(500).send({ error: "Error fetching subscription plan", details: err.message });
-//           if (subscriptionData.length === 0) return res.status(404).send({ error: "Subscription plan not found" });
- 
-//           const subscription = subscriptionData[0];
-//           const userLimit = subscription.number_of_active_users;
- 
-//           // Count current users
-//           const countUsersQuery = "SELECT COUNT(*) AS totalUsers FROM user WHERE subscription_id = ?";
-//           db.pool.query(countUsersQuery, [subscription_id], async (err, userCountResult) => {
-//             if (err) return res.status(500).send({ error: "Error counting users", details: err.message });
- 
-//             const totalUsers = userCountResult[0].totalUsers;
- 
-//             // Allow unlimited users if limit is 0
-//             if (userLimit > 0 && totalUsers >= userLimit) {
-//               return res.status(403).send({ error: "User creation limit reached for your plan" });
-//             }
- 
-//             // Ready to insert new user
-//             const image = req.file ? req.file.filename : null;
-//             const last_login = new Date().toISOString();
-//             const hashedPassword = await bcrypt.hash(password, 10);
- 
-//             const insertUserQuery = `
-//               INSERT INTO user (firstname, lastname, about, email, password, image, last_login, last_logout, status, is_admin, subscription_id,created_by,super_admin)
-//               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?)
-//             `;
-//             const values = [
-//               firstname,
-//               lastname,
-//               about,
-//               email,
-//               hashedPassword,
-//               image,
-//               last_login,
-//               null,
-//               status,
-//               is_admin,
-//               subscription_id,
-//               id,
-//               super_admin
- 
-//             ];
- 
-//             db.pool.query(insertUserQuery, values, (err, data) => {
-//               if (err) {
-//                 return res.status(500).send({ error: "Error adding user", details: err.message });
-//               }
-//               res.status(201).send({ message: "User added successfully", data });
-//             });
-//           });
-//         });
-//       });
-//     });
-//   } catch (err) {
-//     res.status(500).send({ error: "Internal server error", details: err.message });
-//   }
-// };
-
-
-
-
-
-
-// const addUser = async (req, res) => {
-//   try {
-//     // Clean request body
-//     const body = {};
-//     for (let key in req.body) {
-//       body[key.trim()] = req.body[key];
-//     }
-
-//     const id = req.id; // Assuming user ID from middleware (e.g., token auth)
-//     const { firstname, lastname, about, email, password, status, is_admin, super_admin } = body;
-
-//     // Validate required fields
-//     if (!firstname || !lastname || !email || !password || status === undefined) {
-//       return res.status(400).send({ error: "Missing required fields" });
-//     }
-
-//     // Check if email already exists
-//     const checkEmailQuery = "SELECT COUNT(*) AS count FROM user WHERE email = ?";
-//     db.pool.query(checkEmailQuery, [email], (err, result) => {
-//       if (err) return res.status(500).send({ error: "Error checking email", details: err.message });
-//       if (result[0].count > 0) return res.status(409).send({ error: "Email already in use" });
-
-//       // ✅ Super admin bypasses subscription check
-//       if (parseInt(super_admin) === 1) {
-//         return insertUser(null); // Pass null for subscription_id
-//       }
-
-//       // 🔍 Fetch subscription plan for regular user
-//       const subscriptionQuery = "SELECT plan_id FROM superadmin_user_plans WHERE user_id = ?";
-//       db.pool.query(subscriptionQuery, [id], (err, subscriptionResult) => {
-//         if (err) return res.status(500).send({ error: "Error fetching subscription", details: err.message });
-//         if (subscriptionResult.length === 0) return res.status(404).send({ error: "Subscription not found" });
-
-//         const subscription_id = subscriptionResult[0].plan_id;
-
-//         // Get subscription plan details
-//         const getSubscriptionQuery = "SELECT * FROM subscription_plans WHERE plan_id = ?";
-//         db.pool.query(getSubscriptionQuery, [subscription_id], (err, subscriptionData) => {
-//           if (err) return res.status(500).send({ error: "Error fetching subscription plan", details: err.message });
-//           if (subscriptionData.length === 0) return res.status(404).send({ error: "Subscription plan not found" });
-
-//           const subscription = subscriptionData[0];
-//           const userLimit = subscription.number_of_active_users;
-
-//           // Count users under this subscription
-//           const countUsersQuery = "SELECT COUNT(*) AS totalUsers FROM user WHERE subscription_id = ?";
-//           db.pool.query(countUsersQuery, [subscription_id], async (err, userCountResult) => {
-//             if (err) return res.status(500).send({ error: "Error counting users", details: err.message });
-
-//             const totalUsers = userCountResult[0].totalUsers;
-
-//             // 🚫 If plan is limited and limit reached
-//             if (userLimit !== 0 && totalUsers >= userLimit) {
-//               return res.status(403).send({ error: "User creation limit reached for your plan" });
-//             }
-
-//             // ✅ Insert user
-//             insertUser(subscription_id);
-//           });
-//         });
-//       });
-
-//       // ✅ Common function to insert user
-//       async function insertUser(subscription_id) {
-//         try {
-//           const image = req.file ? req.file.filename : null;
-//           const last_login = new Date().toISOString();
-//           const hashedPassword = await bcrypt.hash(password, 10);
-
-//           const insertUserQuery = `
-//             INSERT INTO user 
-//               (firstname, lastname, about, email, password, image, last_login, last_logout, status, is_admin, subscription_id, created_by, super_admin)
-//             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-//           `;
-//           const values = [
-//             firstname,
-//             lastname,
-//             about,
-//             email,
-//             hashedPassword,
-//             image,
-//             last_login,
-//             null,         // last_logout
-//             status,
-//             is_admin,
-//             subscription_id,
-//             id,
-//             super_admin
-//           ];
-
-//           db.pool.query(insertUserQuery, values, (err, data) => {
-//             if (err) {
-//               return res.status(500).send({ error: "Error adding user", details: err.message });
-//             }
-//             return res.status(201).send({ message: "User added successfully", data });
-//           });
-//         } catch (err) {
-//           return res.status(500).send({ error: "Insert error", details: err.message });
-//         }
-//       }
-//     });
-//   } catch (err) {
-//     return res.status(500).send({ error: "Internal server error", details: err.message });
-//   }
-// };
 const addUser = async (req, res) => {
   try {
     // Clean request body
@@ -405,7 +51,7 @@ const addUser = async (req, res) => {
       }
  
       // 🔍 Fetch subscription plan for regular user
-      const subscriptionQuery = "SELECT plan_id FROM superadmin_user_plans WHERE user_id = ?";
+      const subscriptionQuery = "SELECT plan_id FROM superadmin_user_plans WHERE user_id = ? AND package_status = 'approved' ORDER BY user_plan_id DESC LIMIT 1";
       db.pool.query(subscriptionQuery, [id], (err, subscriptionResult) => {
         if (err) return res.status(500).send({ error: "Error fetching subscription", details: err.message });
         if (subscriptionResult.length === 0) return res.status(404).send({ error: "Subscription not found" });
@@ -489,35 +135,43 @@ const addBulkUsers = async (req, res) => {
       if (!req.body.users || !Array.isArray(req.body.users) || req.body.users.length === 0) {
         return res.status(400).json({ error: "Invalid or empty file uploaded" });
       }
-  
+
+      const callerUserId = req.id;
+      const [callerRows] = await db.pool.promise().query(
+        "SELECT is_admin, created_by FROM user WHERE id = ?", [callerUserId]
+      );
+      if (!callerRows.length) return res.status(404).json({ error: "User not found" });
+      const { is_admin, created_by: callerCreatedBy } = callerRows[0];
+      const creatorId = is_admin === 1 ? callerUserId : callerCreatedBy;
+      if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+
       const users = req.body.users;
-  
+
       for (let user of users) {
-        const { firstname, lastname, about, email, password, status, is_admin } = user;
-  
+        const { firstname, lastname, about, email, password, status, is_admin: userIsAdmin } = user;
+
         if (!firstname || !lastname || !email || !password || status === undefined) {
           return res.status(400).json({ error: "Missing required fields" });
         }
-  
-        // ✅ Use `.promise().query()` to get promises
+
         const checkEmailQuery = "SELECT COUNT(*) AS count FROM user WHERE email = ?";
         const [existingUser] = await db.pool.promise().query(checkEmailQuery, [email]);
-  
+
         if (existingUser[0].count > 0) {
           return res.status(409).json({ error: `User with email ${email} already exists` });
         }
-  
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const insertUserQuery = `
-          INSERT INTO user (firstname, lastname, about, email, password, status, is_admin)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO user (firstname, lastname, about, email, password, status, is_admin, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
-  
+
         await db.pool.promise().query(insertUserQuery, [
-          firstname, lastname, about, email, hashedPassword, status, is_admin
+          firstname, lastname, about, email, hashedPassword, status, userIsAdmin, creatorId
         ]);
       }
-  
+
       res.status(200).json({ message: "Users uploaded successfully" });
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -645,24 +299,33 @@ const addBulkUsers = async (req, res) => {
 };
   const deleteUser = async (req, res) => {
     const { id } = req.params;
-  
-    const sqlFetchImage = `SELECT image FROM user WHERE id = ?`;
-    db.pool.query(sqlFetchImage, [id], (err, result) => {
+    const callerUserId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [callerUserId], (err, userResult) => {
+      if (err) return res.status(500).json({ error: "Server error" });
+      if (!userResult.length) return res.status(404).json({ error: "User not found" });
+      const { is_admin, created_by: callerCreatedBy } = userResult[0];
+      const creatorId = is_admin === 1 ? callerUserId : callerCreatedBy;
+      if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+
+    const sqlFetchImage = `SELECT image FROM user WHERE id = ? AND created_by = ?`;
+    db.pool.query(sqlFetchImage, [id, creatorId], (err, result) => {
       if (err) {
         console.error("Error fetching image:", err);
         return res
           .status(500)
           .json({ error: "Internal Server Error", details: err });
       }
-  
+
       if (result.length === 0) {
         return res.status(404).json({ error: "User not found" });
       }
-  
+
       const imageFilename = result[0].image;
-  
-      const sqlDeleteUser = `DELETE FROM user WHERE id = ?`;
-      db.pool.query(sqlDeleteUser, [id], (err, result) => {
+
+      const sqlDeleteUser = `DELETE FROM user WHERE id = ? AND created_by = ?`;
+      db.pool.query(sqlDeleteUser, [id, creatorId], (err, result) => {
         if (err) {
           console.error("Error deleting user:", err);
           return res
@@ -696,18 +359,29 @@ const addBulkUsers = async (req, res) => {
         }
       });
     });
+    });
   };
 
 
 
-  
+
 const getUserById = async (req, res) => {
   try {
-    const id = req.params.id;  // Get user ID from the URL parameters
+    const id = req.params.id;
+    const callerUserId = req.id;
 
-    const getUserQuery = 'SELECT * FROM user WHERE id = ?';
+    const [callerRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [callerUserId]
+    );
+    if (!callerRows.length) return res.status(404).send({ error: 'User not found' });
+    const { is_admin, created_by: callerCreatedBy } = callerRows[0];
+    const creatorId = is_admin === 1 ? callerUserId : callerCreatedBy;
+    if (!creatorId) return res.status(403).send({ error: 'Unauthorized' });
 
-    db.pool.query(getUserQuery, [id], (err, result) => {
+    // Allow viewing own record or records created by this tenant
+    const getUserQuery = 'SELECT * FROM user WHERE id = ? AND (created_by = ? OR id = ?)';
+
+    db.pool.query(getUserQuery, [id, creatorId, callerUserId], (err, result) => {
       if (err) {
         return res.status(500).send({ error: 'Error while fetching user', details: err.message });
       }
@@ -716,7 +390,6 @@ const getUserById = async (req, res) => {
         return res.status(404).send({ error: 'User not found' });
       }
 
-      // Map the result to get only the necessary fields
       const user = {
         firstname: result[0].firstname,
         lastname: result[0].lastname,
@@ -750,661 +423,6 @@ const logoutUser = async (req, res) => {
   });
 };
   
-  
-  
-//   const loginUser = async (req, res) => {
-//   const { email, password } = req.body;
-//   console.log(email, password);
- 
-//   const sql = `SELECT * FROM user WHERE email = ?`;
- 
-//   db.pool.query(sql, [email], async (err, data) => {
-//     if (err) {
-//       return res.status(500).send({ error: 'Internal server error', details: err.message });
-//     }
- 
-//     if (data.length === 0) {
-//       return res.status(401).send({ message: 'Invalid email' });
-//     }
- 
-//     const user = data[0];
-//     console.log(data);
-//     const isPasswordMatch = await bcrypt.compare(password, user.password);
- 
-//     if (!isPasswordMatch) {
-//       return res.status(401).send({ message: 'Invalid email or password' });
-//     }
- 
-//     const checkSubscription = (userIdToCheck, callback) => {
-//       const subQuery = `
-//         SELECT start_date, end_date, plan_id, package_status
-//         FROM superadmin_user_plans
-//         WHERE user_id = ?
-//         ORDER BY user_plan_id DESC
-//         LIMIT 1
-//       `;
- 
-//       db.pool.query(subQuery, [userIdToCheck], (err, plans) => {
-//         if (err) return callback(err);
- 
-//         if (plans.length === 0) {
-//           return callback(null, { allowed: false, reason: 'No active subscription found.' });
-//         }
- 
-//         const plan = plans[0];
-//         const currentDate = new Date();
- 
-//         if (plan.package_status.toLowerCase() !== 'approved') {
-//           return callback(null, { allowed: false, reason: 'Subscription not approved.' });
-//         }
- 
-//         if (currentDate > new Date(plan.end_date)) {
-//           return callback(null, { allowed: false, reason: 'Subscription expired.' });
-//         }
- 
-//         return callback(null, { allowed: true, plan });
-//       });
-//     };
- 
-//     const proceedLogin = (plan = {}) => {
-//       const tokenPayload = {
-//         id: user.id,
-//         email: user.email,
-//         plan_id: plan.plan_id || null,
-//       };
- 
-//       const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '1440m' });
- 
-//       const updateLoginSql = `UPDATE user SET last_login = NOW(), authtoken = ? WHERE id = ?`;
- 
-//       db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//         if (updateErr) {
-//           return res.status(500).send({ error: 'Failed to update login details', details: updateErr.message });
-//         }
- 
-//         // Super Admin login
-//         if (user.super_admin === 2) {
-//           return res.status(200).send({
-//             message: 'Super Admin login successful',
-//             token,
-//             userId: user.id,
-//             username: `${user.firstname} ${user.lastname}`,
-//             superAdmin: true,
-//             websitelink: `https://krayon.theprojectxyz.xyz/superadmin`,
-//           });
-//         }
- 
-//         // Admin login
-//         if (user.is_admin === 1) {
-//           return res.status(200).send({
-//             message: 'Admin login successful',
-//             token,
-//             userId: user.id,
-//             username: `${user.firstname} ${user.lastname}`,
-//             isAdmin: true,
-//             planData: plan,
-//           });
-//         }
- 
-//         // Normal user login
-//         const roleQuery = `SELECT fk_role_id FROM sec_user_access_tbl WHERE fk_user_id = ?`;
- 
-//         db.pool.query(roleQuery, [user.id], (roleErr, roleData) => {
-//           if (roleErr) {
-//             return res.status(500).send({ error: 'Error fetching user role', details: roleErr.message });
-//           }
- 
-//           if (roleData.length === 0) {
-//             return res.status(403).send({ error: 'Role not assigned to the user' });
-//           }
- 
-//           const roleId = roleData[0].fk_role_id;
- 
-//           const permissionQuery = `SELECT * FROM sec_role_permission WHERE role_id = ?`;
- 
-//           db.pool.query(permissionQuery, [roleId], (permErr, permData) => {
-//             if (permErr) {
-//               return res.status(500).send({ error: 'Error fetching role permissions', details: permErr.message });
-//             }
- 
-//             return res.status(200).send({
-//               message: 'Login successful',
-//               token,
-//               userId: user.id,
-//               username: `${user.firstname} ${user.lastname}`,
-//               roleId,
-//               permData: permData,
-//               isAdmin: false,
-//             });
-//           });
-//         });
-//       });
-//     };
- 
-//     // Bypass subscription check for Super Admins
-//     if (user.super_admin === 2) {
-//       return proceedLogin(); // Pass empty plan or null
-//     }
- 
-//     const creatorId = user.created_by || user.id;
- 
-//     checkSubscription(creatorId, (err, result) => {
-//       if (err) {
-//         return res.status(500).send({ error: 'Error checking subscription', details: err.message });
-//       }
- 
-//       if (!result.allowed) {
-//         return res.status(403).send({ message: result.reason });
-//       }
- 
-//       proceedLogin(result.plan);
-//     });
-//   });
-// };
- 
-
-
-// const loginUser = async (req, res) => {
-//   const { email, password, superadmin } = req.body;
-//   console.log(superadmin)
-
-//   if (!email || !password) {
-//     return res.status(400).send({ message: "Email and password are required" });
-//   }
-
-//   const sql = `SELECT * FROM user WHERE email = ?`;
-
-//   db.pool.query(sql, [email], async (err, data) => {
-//     if (err) return res.status(500).send({ error: 'Internal server error', details: err.message });
-
-//     if (data.length === 0) {
-//       return res.status(401).send({ message: 'Invalid email' });
-//     }
-
-//     const user = data[0];
-
-//     const isPasswordMatch = await bcrypt.compare(password, user.password);
-//     if (!isPasswordMatch) {
-//       return res.status(401).send({ message: 'Invalid email or password' });
-//     }
-
-//     const token = jwt.sign({ id: user.id, email: user.email, plan_id: null }, JWT_SECRET, {
-//       expiresIn: '1440m'
-//     });
-
-//     const updateLoginSql = `UPDATE user SET last_login = NOW(), authtoken = ? WHERE id = ?`;
-
-//     // ✅ Super Admin Login (Normal UI mode - NOT impersonating)
-//     if (user.super_admin === 2 && !superadmin) {
-//       db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//         if (updateErr) {
-//           return res.status(500).send({ error: 'Login update failed', details: updateErr.message });
-//         }
-
-//         return res.status(200).send({
-//           message: 'Super Admin login successful',
-//           token,
-//           userId: user.id,
-//           username: `${user.firstname} ${user.lastname}`,
-//           superAdmin: true,
-//           websitelink: 'https://krayon.theprojectxyz.xyz/superadmin'
-//         });
-//       });
-//       return;
-//     }
-
-//     // ✅ Super Admin Logging in as Admin (Impersonation Mode)
-//     if (user.super_admin === 2 && superadmin === true) {
-//       db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//         if (updateErr) {
-//           return res.status(500).send({ error: 'Login update failed', details: updateErr.message });
-//         }
-
-//         return res.status(200).send({
-//           message: 'Admin login successful',
-//           token,
-//           userId: user.id,
-//           username: `${user.firstname} ${user.lastname}`,
-//           isAdmin: true,
-//           planData: {}
-//         });
-//       });
-//       return;
-//     }
-
-//     // 🔒 From here onward, only regular users & admins (non-superadmin)
-//     const checkSubscription = (userIdToCheck, callback) => {
-//       const subQuery = `
-//         SELECT start_date, end_date, plan_id, package_status
-//         FROM superadmin_user_plans
-//         WHERE user_id = ?
-//         ORDER BY user_plan_id DESC
-//         LIMIT 1
-//       `;
-
-//       db.pool.query(subQuery, [userIdToCheck], (err, plans) => {
-//         if (err) return callback(err);
-//         if (plans.length === 0) return callback(null, { allowed: false, reason: 'No active subscription found.' });
-
-//         const plan = plans[0];
-//         const currentDate = new Date();
-
-//         if (plan.package_status.toLowerCase() !== 'approved') {
-//           return callback(null, { allowed: false, reason: 'Subscription not approved.' });
-//         }
-
-//         if (currentDate > new Date(plan.end_date)) {
-//           return callback(null, { allowed: false, reason: 'Subscription expired.' });
-//         }
-
-//         return callback(null, { allowed: true, plan });
-//       });
-//     };
-
-//     const proceedLogin = (plan = {}) => {
-//       db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//         if (updateErr) {
-//           return res.status(500).send({ error: 'Login update failed', details: updateErr.message });
-//         }
-
-//         if (user.is_admin === 1) {
-//           return res.status(200).send({
-//             message: 'Admin login successful',
-//             token,
-//             userId: user.id,
-//             username: `${user.firstname} ${user.lastname}`,
-//             isAdmin: true,
-//             planData: plan,
-//           });
-//         }
-
-//         const roleQuery = `SELECT fk_role_id FROM sec_user_access_tbl WHERE fk_user_id = ?`;
-//         db.pool.query(roleQuery, [user.id], (roleErr, roleData) => {
-//           if (roleErr || roleData.length === 0) {
-//             return res.status(403).send({ message: 'Role not assigned or error fetching role' });
-//           }
-
-//           const roleId = roleData[0].fk_role_id;
-//           const permissionQuery = `SELECT * FROM sec_role_permission WHERE role_id = ?`;
-
-//           db.pool.query(permissionQuery, [roleId], (permErr, permData) => {
-//             if (permErr) {
-//               return res.status(500).send({ error: 'Permission fetch failed', details: permErr.message });
-//             }
-
-//             return res.status(200).send({
-//               message: 'Login successful',
-//               token,
-//               userId: user.id,
-//               username: `${user.firstname} ${user.lastname}`,
-//               roleId,
-//               permData,
-//               isAdmin: false,
-//             });
-//           });
-//         });
-//       });
-//     };
-
-//     const creatorId = user.created_by || user.id;
-
-//     checkSubscription(creatorId, (err, result) => {
-//       if (err) {
-//         return res.status(500).send({ error: 'Error checking subscription', details: err.message });
-//       }
-
-//       if (!result.allowed) {
-//         return res.status(403).send({ message: result.reason });
-//       }
-
-//       proceedLogin(result.plan);
-//     });
-//   });
-// };
-
-
-// const loginUser = async (req, res) => {
-//   const { email, password, superadmin } = req.body;
- 
-//   if (!email) {
-//     return res.status(400).send({ message: "Email is required" });
-//   }
- 
-//   const sql = `SELECT * FROM user WHERE email = ?`;
- 
-//   db.pool.query(sql, [email], async (err, data) => {
-//     if (err) return res.status(500).send({ error: 'Internal server error', details: err.message });
- 
-//     if (data.length === 0) {
-//       return res.status(401).send({ message: 'Invalid email' });
-//     }
- 
-//     const user = data[0];
-// console.log(superadmin,"D")
-//     // ✅ Super Admin impersonating admin (email only)
-//     if (superadmin === true) {
-//       // Check if logged-in user is a superadmin
-//       const superAdminCheckQuery = `SELECT * FROM user WHERE super_admin = 2 LIMIT 1`;
- 
-//       db.pool.query(superAdminCheckQuery, async (err, saData) => {
-//         if (err || saData.length === 0) {
-//           return res.status(403).send({ message: "Super Admin privilege required to impersonate" });
-//         }
- 
-//         const token = jwt.sign({ id: user.id, email: user.email, plan_id: null }, JWT_SECRET, {
-//           expiresIn: '1440m'
-//         });
- 
-//         const updateLoginSql = `UPDATE user SET last_login = NOW(), authtoken = ? WHERE id = ?`;
- 
-//         db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//           if (updateErr) {
-//             return res.status(500).send({ error: 'Login update failed', details: updateErr.message });
-//           }
- 
-//           return res.status(200).send({
-//             message: 'Admin login successful',
-//             token,
-//             userId: user.id,
-//             username: `${user.firstname} ${user.lastname}`,
-//             isAdmin: true,
-//             planData: {}
-//           });
-//         });
-//       });
-//       return;
-//     }
- 
-//     // ✅ Regular login - password required
-//     const isPasswordMatch = await bcrypt.compare(password, user.password);
-//     if (!isPasswordMatch) {
-//       return res.status(401).send({ message: 'Invalid email or password' });
-//     }
- 
-//     const token = jwt.sign({ id: user.id, email: user.email, plan_id: null }, JWT_SECRET, {
-//       expiresIn: '1440m'
-//     });
- 
-//     const updateLoginSql = `UPDATE user SET last_login = NOW(), authtoken = ? WHERE id = ?`;
- 
-//     // ✅ Super Admin logging in normally
-//     if (user.super_admin === 2 && !superadmin) {
-//       db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//         if (updateErr) {
-//           return res.status(500).send({ error: 'Login update failed', details: updateErr.message });
-//         }
- 
-//         return res.status(200).send({
-//           message: 'Super Admin login successful',
-//           token,
-//           userId: user.id,
-//           username: `${user.firstname} ${user.lastname}`,
-//           superAdmin: true,
-//           websitelink: 'https://krayon.theprojectxyz.xyz/superadmin'
-//         });
-//       });
-//       return;
-//     }
- 
-//     // 🔒 Subscription validation for regular admins/users
-//     const checkSubscription = (userIdToCheck, callback) => {
-//       const subQuery = `
-//         SELECT start_date, end_date, plan_id, package_status
-//         FROM superadmin_user_plans
-//         WHERE user_id = ?
-//         ORDER BY user_plan_id DESC
-//         LIMIT 1
-//       `;
- 
-//       db.pool.query(subQuery, [userIdToCheck], (err, plans) => {
-//         if (err) return callback(err);
-//         if (plans.length === 0) return callback(null, { allowed: false, reason: 'No active subscription found.' });
- 
-//         const plan = plans[0];
-//         const currentDate = new Date();
- 
-//         if (plan.package_status.toLowerCase() !== 'approved') {
-//           return callback(null, { allowed: false, reason: 'Subscription not approved.' });
-//         }
- 
-//         if (currentDate > new Date(plan.end_date)) {
-//           return callback(null, { allowed: false, reason: 'Subscription expired.' });
-//         }
- 
-//         return callback(null, { allowed: true, plan });
-//       });
-//     };
- 
-//     const proceedLogin = (plan = {}) => {
-//       db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//         if (updateErr) {
-//           return res.status(500).send({ error: 'Login update failed', details: updateErr.message });
-//         }
- 
-//         if (user.is_admin === 1) {
-//           return res.status(200).send({
-//             message: 'Admin login successful',
-//             token,
-//             userId: user.id,
-//             username: `${user.firstname} ${user.lastname}`,
-//             isAdmin: true,
-//             planData: plan,
-//           });
-//         }
- 
-//         const roleQuery = `SELECT fk_role_id FROM sec_user_access_tbl WHERE fk_user_id = ?`;
-//         db.pool.query(roleQuery, [user.id], (roleErr, roleData) => {
-//           if (roleErr || roleData.length === 0) {
-//             return res.status(403).send({ message: 'Role not assigned or error fetching role' });
-//           }
- 
-//           const roleId = roleData[0].fk_role_id;
-//           const permissionQuery = `SELECT * FROM sec_role_permission WHERE role_id = ?`;
- 
-//           db.pool.query(permissionQuery, [roleId], (permErr, permData) => {
-//             if (permErr) {
-//               return res.status(500).send({ error: 'Permission fetch failed', details: permErr.message });
-//             }
- 
-//             return res.status(200).send({
-//               message: 'Login successful',
-//               token,
-//               userId: user.id,
-//               username: `${user.firstname} ${user.lastname}`,
-//               roleId,
-//               permData,
-//               isAdmin: false,
-//             });
-//           });
-//         });
-//       });
-//     };
- 
-//     const creatorId = user.created_by || user.id;
- 
-//     checkSubscription(creatorId, (err, result) => {
-//       if (err) {
-//         return res.status(500).send({ error: 'Error checking subscription', details: err.message });
-//       }
- 
-//       if (!result.allowed) {
-//         return res.status(403).send({ message: result.reason });
-//       }
- 
-//       proceedLogin(result.plan);
-//     });
-//   });
-// };
-
-// const loginUser = async (req, res) => {
-//   const { email, password, superadmin } = req.body;
- 
-//   if (!email) return res.status(400).send({ message: "Email is required" });
- 
-//   const sql = `SELECT * FROM user WHERE email = ?`;
- 
-//   db.pool.query(sql, [email], async (err, data) => {
-//     if (err) return res.status(500).send({ error: "Internal server error", details: err.message });
-//     if (data.length === 0) return res.status(401).send({ message: "Invalid email" });
- 
-//     const user = data[0];
-//     const token = jwt.sign({ id: user.id, email: user.email, plan_id: null }, JWT_SECRET, {
-//       expiresIn: "1440m"
-//     });
- 
-//     const updateLoginSql = `UPDATE user SET last_login = NOW(), authtoken = ? WHERE id = ?`;
- 
-//     // ✅ Super Admin Impersonation (email only, no password)
-//     if (superadmin === true) {
-//       const superAdminCheckQuery = `SELECT * FROM user WHERE super_admin = 2 LIMIT 1`;
- 
-//       db.pool.query(superAdminCheckQuery, async (err, saData) => {
-//         if (err || saData.length === 0) {
-//           return res.status(403).send({ message: "Super Admin privilege required to impersonate" });
-//         }
- 
-//         db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//           if (updateErr) {
-//             return res.status(500).send({ error: "Login update failed", details: updateErr.message });
-//           }
- 
-//           const subQuery = `
-//             SELECT start_date, end_date, plan_id, package_status
-//             FROM superadmin_user_plans
-//             WHERE user_id = ?
-//             ORDER BY user_plan_id DESC
-//             LIMIT 1
-//           `;
- 
-//           db.pool.query(subQuery, [user.id], (subErr, plans) => {
-//             const plan = plans?.[0] || null;
-//             return res.status(200).send({
-//               message: "Admin login successful",
-//               token,
-//               userId: user.id,
-//               username: `${user.firstname} ${user.lastname}`,
-//               isAdmin: true,
-//               planData: plan
-//             });
-//           });
-//         });
-//       });
-//       return;
-//     }
- 
-//     // ✅ Password check for regular login
-//     const isPasswordMatch = await bcrypt.compare(password, user.password);
-//     if (!isPasswordMatch) {
-//       return res.status(401).send({ message: "Invalid email or password" });
-//     }
- 
-//     // ✅ Super Admin logging in normally
-//     if (user.super_admin === 2 && !superadmin) {
-//       db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//         if (updateErr) return res.status(500).send({ error: "Login update failed", details: updateErr.message });
- 
-//         return res.status(200).send({
-//           message: "Super Admin login successful",
-//           token,
-//           userId: user.id,
-//           username: `${user.firstname} ${user.lastname}`,
-//           superAdmin: true,
-//           websitelink: "https://krayon.theprojectxyz.xyz/superadmin"
-//         });
-//       });
-//       return;
-//     }
- 
-//     // 🔒 Subscription check
-//     const checkSubscription = (userIdToCheck, callback) => {
-//       const subQuery = `
-//         SELECT start_date, end_date, plan_id, package_status
-//         FROM superadmin_user_plans
-//         WHERE user_id = ?
-//         ORDER BY user_plan_id DESC
-//         LIMIT 1
-//       `;
- 
-//       db.pool.query(subQuery, [userIdToCheck], (err, plans) => {
-//         if (err) return callback(err);
-//         if (plans.length === 0) return callback(null, { allowed: false, reason: "No active subscription found." });
- 
-//         const plan = plans[0];
-//         const currentDate = new Date();
- 
-//         if (plan.package_status.toLowerCase() !== "approved") {
-//           return callback(null, { allowed: false, reason: "Subscription not approved." });
-//         }
- 
-//         if (currentDate > new Date(plan.end_date)) {
-//           return callback(null, { allowed: false, reason: "Subscription expired." });
-//         }
- 
-//         return callback(null, { allowed: true, plan });
-//       });
-//     };
- 
-//     const proceedLogin = (plan = {}) => {
-//       db.pool.query(updateLoginSql, [token, user.id], (updateErr) => {
-//         if (updateErr) return res.status(500).send({ error: "Login update failed", details: updateErr.message });
- 
-//         // ✅ Admin login
-//         if (user.is_admin === 1) {
-//           return res.status(200).send({
-//             message: "Admin login successful",
-//             token,
-//             userId: user.id,
-//             username: `${user.firstname} ${user.lastname}`,
-//             isAdmin: true,
-//             planData: plan
-//           });
-//         }
- 
-//         // ✅ Role & Permission fetch for normal users
-//         const roleQuery = `SELECT fk_role_id FROM sec_user_access_tbl WHERE fk_user_id = ?`;
-//         db.pool.query(roleQuery, [user.id], (roleErr, roleData) => {
-//           if (roleErr || roleData.length === 0) {
-//             return res.status(403).send({ message: "Role not assigned or error fetching role" });
-//           }
- 
-//           const roleId = roleData[0].fk_role_id;
-//           const permissionQuery = `SELECT * FROM sec_role_permission WHERE role_id = ?`;
- 
-//           db.pool.query(permissionQuery, [roleId], (permErr, permData) => {
-//             if (permErr) {
-//               return res.status(500).send({ error: "Permission fetch failed", details: permErr.message });
-//             }
- 
-//             return res.status(200).send({
-//               message: "Login successful",
-//               token,
-//               userId: user.id,
-//               username: `${user.firstname} ${user.lastname}`,
-//               roleId,
-//               planData:permData,
-//               permData:permData,
-//               isAdmin: false
-//             });
-//           });
-//         });
-//       });
-//     };
- 
-//     const creatorId = user.created_by || user.id;
- 
-//     checkSubscription(creatorId, (err, result) => {
-//       if (err) {
-//         return res.status(500).send({ error: "Error checking subscription", details: err.message });
-//       }
- 
-//       if (!result.allowed) {
-//         return res.status(403).send({ message: result.reason });
-//       }
- 
-//       proceedLogin(result.plan);
-//     });
-//   });
-// };
 
 const loginUser = async (req, res) => {
   const { email, password, superadmin } = req.body;
@@ -1584,6 +602,7 @@ const loginUser = async (req, res) => {
 
   const updateUser = async (req, res) => {
   const { id } = req.params;
+  const callerUserId = req.id;
   const {
     firstname,
     lastname,
@@ -1592,11 +611,25 @@ const loginUser = async (req, res) => {
     password,
     status,
     is_admin,
-    created_by,
   } = req.body;
- 
-  const fetchCurrentDataSql = "SELECT * FROM user WHERE id = ?";
-  db.pool.query(fetchCurrentDataSql, [id], async (fetchErr, fetchData) => {
+
+  // Resolve caller's tenant context
+  let creatorId;
+  try {
+    const [callerRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?", [callerUserId]
+    );
+    if (!callerRows.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin: callerIsAdmin, created_by: callerCreatedBy } = callerRows[0];
+    creatorId = callerIsAdmin === 1 ? callerUserId : callerCreatedBy;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+  } catch (e) {
+    return res.status(500).json({ error: "Server error" });
+  }
+
+  // Fetch target user — must belong to tenant or be the caller themselves
+  const fetchCurrentDataSql = "SELECT * FROM user WHERE id = ? AND (created_by = ? OR id = ?)";
+  db.pool.query(fetchCurrentDataSql, [id, creatorId, callerUserId], async (fetchErr, fetchData) => {
     if (fetchErr) {
       console.error("Database fetch error: ", fetchErr);
       return res.status(500).json({ error: "Internal Server Error" });
@@ -1633,7 +666,7 @@ const loginUser = async (req, res) => {
                 SET firstname = ?, lastname = ?, about = ?, email = ?, status = ?, is_admin = ?,
                     password = ?, image = ?, created_by = ?
                 WHERE id = ?`;
- 
+
     const values = [
       firstname || currentData.firstname,
       lastname || currentData.lastname,
@@ -1643,7 +676,7 @@ const loginUser = async (req, res) => {
       is_admin || currentData.is_admin,
       hashedPassword,
       newImageFilename,
-      created_by || currentData.created_by,
+      currentData.created_by,  // always keep stored value
       id
     ];
  
@@ -1661,15 +694,14 @@ const loginUser = async (req, res) => {
 
   const getAllCountry = async (req, res) => {
     try {
-      const response = await axios.get('https://restcountries.com/v3.1/all');
-      
-      // Map the country data to include an id and the country name
-      const countryData = response.data.map((country, index) => ({
-        countryName: country.name.common,
-        id: index + 1
-      }));
-      
-      res.status(200).json({ data: countryData });
+      const adminId = req.user?.created_by || req.user?.id;
+      db.pool.query('SELECT id, name AS countryName FROM countries', (err, results) => {
+        if (err) {
+          console.error('Error fetching countries from DB:', err);
+          return res.status(500).json({ error: 'Failed to retrieve country names' });
+        }
+        res.status(200).json({ data: results });
+      });
     } catch (error) {
       console.error('Error fetching country names:', error);
       res.status(500).json({ error: 'Failed to retrieve country names' });
@@ -1678,11 +710,18 @@ const loginUser = async (req, res) => {
 
   const checkIncheckOut = async (req, res) => {
     try {
-      // Corrected SQL query with proper CONCAT syntax
-      const query = `SELECT id, CONCAT(firstname, ' ', lastname) AS username, last_login, last_logout FROM user`;
-      
-      // Execute the query (assuming dbQuery returns a promise)
-      const result = await dbQuery(query);
+      const callerUserId = req.id;
+      const [callerRows] = await db.pool.promise().query(
+        "SELECT is_admin, created_by FROM user WHERE id = ?", [callerUserId]
+      );
+      if (!callerRows.length) return res.status(404).json({ message: "User not found", success: false });
+      const { is_admin, created_by: callerCreatedBy } = callerRows[0];
+      const creatorId = is_admin === 1 ? callerUserId : callerCreatedBy;
+      if (!creatorId) return res.status(403).json({ message: "Unauthorized", success: false });
+
+      const query = `SELECT id, CONCAT(firstname, ' ', lastname) AS username, last_login, last_logout FROM user WHERE created_by = ? OR id = ?`;
+
+      const result = await dbQuery(query, [creatorId, creatorId]);
       
       if (result.length === 0) {
         return res.status(404).json({ message: "No data found" });
@@ -1765,7 +804,7 @@ const loginUser = async (req, res) => {
             html: `
                 <h1>Password Reset Request</h1>
                 <p>You requested a password reset. Click the link below to reset your password:</p>
-                <p><a href="https://krayon.theprojectxyz.xyz/frontend/resetpassword/${id}/${token}">Reset Password</a></p>
+                <p><a href="https://krayon.softwarestesting.co.in/frontend/resetpassword/${id}/${token}">Reset Password</a></p>
                 <p>If you did not request this, please ignore this email.</p>
             `,
         };

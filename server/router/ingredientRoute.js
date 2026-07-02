@@ -8,12 +8,12 @@ router.post("/ingredients", auth,ingredientsController.createIngredient);
 // router.put("/ingredients/:id", ingredientsController.updateIngredient);
 
 // Delete an existing ingredient
-router.delete("/ingredients/:id", ingredientsController.deleteIngredient);
+router.delete("/ingredients/:id", auth, ingredientsController.deleteIngredient);
 
 // Get all ingredients
 router.get("/ingredients",auth,ingredientsController.getAllIngredients);
-router.get('/ingredients/:id', ingredientsController.getIngredientById);
-router.put('/ingredients/:id',ingredientsController.updateIngredient);
+router.get('/ingredients/:id', auth, ingredientsController.getIngredientById);
+router.put('/ingredients/:id', auth, ingredientsController.updateIngredient);
 // get ingredient list accourding t stock
 
 router.get('/ingredientsdetail',auth,ingredientsController.getIngredientsDetails);

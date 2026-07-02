@@ -43,6 +43,7 @@ const dbQuery = (query, values) => {
     let getWasteDetailsQuery = `
       SELECT
         pfw.order_id,
+        co.saleinvoice,
         pfw.id,
         pfw.ingradient_id,
         pfw.qnty,
@@ -52,6 +53,7 @@ const dbQuery = (query, values) => {
         ing.ingredient_name
       FROM packaging_food_waste pfw
       INNER JOIN ingredients ing ON pfw.ingradient_id = ing.id
+      LEFT JOIN customer_order co ON pfw.order_id = co.order_id
       WHERE pfw.createdby = ?
     `;
  
@@ -68,7 +70,7 @@ const dbQuery = (query, values) => {
     if (searchItem) {
       const searchValue = `%${searchItem}%`;
       whereConditions.push(`
-        (pfw.order_id LIKE ?
+        (co.saleinvoice LIKE ?
         OR pfw.ingradient_id LIKE ?
         OR pfw.qnty LIKE ?
         OR pfw.l_price LIKE ?
@@ -143,26 +145,28 @@ const dbQuery = (query, values) => {
     }
  
     // Step 4: Continue with your existing logic
-    const checkWasteQuery = `SELECT * FROM packaging_food_waste WHERE order_id = ?`;
-    const wasteResult = await dbQuery(checkWasteQuery, [orderid]);
- 
-    if (wasteResult.length > 0) {
-      return res.status(400).send('The order already exists');
-    }
- 
-    const checkOrderQuery = `SELECT order_id FROM customer_order WHERE order_id = ? AND order_date = ?`;
-    const orderResult = await dbQuery(checkOrderQuery, [orderid, newDate]);
- 
+    const checkOrderQuery = `SELECT order_id FROM customer_order WHERE saleinvoice = ? AND created_by = ?`;
+    const orderResult = await dbQuery(checkOrderQuery, [orderid, created_by]);
+
     if (orderResult.length !== 1) {
       return res.status(400).send('Order not found for the current date');
     }
- 
+
+    const actualOrderId = orderResult[0].order_id;
+
+    const checkWasteQuery = `SELECT * FROM packaging_food_waste WHERE order_id = ?`;
+    const wasteResult = await dbQuery(checkWasteQuery, [actualOrderId]);
+
+    if (wasteResult.length > 0) {
+      return res.status(400).send('The order already exists');
+    }
+
     for (let index = 0; index < itemdetails.length; index++) {
       const { ingradient_id, qnty, l_price, note } = itemdetails[index];
       const finallostprice = qnty * l_price;
- 
+
       const data1 = {
-        order_id: orderid,
+        order_id: actualOrderId,
         ingradient_id,
         qnty,
         l_price: finallostprice,
@@ -583,25 +587,44 @@ const dbQuery = (query, values) => {
   // post maing food waste 
   const insertFoodInformation = async (req, res) => {
     const { userdetails, itemdetails } = req.body;
-    const { user } = userdetails[0]; // Assuming userdetails[0] has the user property
- 
-    const saveid = req.id; // Assuming session is managed in req.session
-    const newDate = new Date().toISOString().slice(0, 19).replace('T', ' '); // Format date as 'YYYY-MM-DD HH:mm:ss'
- 
+    const { user } = userdetails[0];
+
+    const saveid = req.id;
+    const newDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
     try {
+      const [userSubscription] = await dbQuery(
+        `SELECT * FROM superadmin_user_plans WHERE user_id = ?`, [saveid]
+      );
+
+      let resolvedCreatedBy = saveid;
+
+      if (!userSubscription) {
+        const [userInfo] = await dbQuery(`SELECT created_by FROM user WHERE id = ?`, [saveid]);
+        if (!userInfo || !userInfo.created_by) {
+          return res.status(403).json({ message: "You are not authorized to perform this operation." });
+        }
+        const creatorSub = await dbQuery(
+          `SELECT * FROM superadmin_user_plans WHERE user_id = ?`, [userInfo.created_by]
+        );
+        if (!creatorSub.length) {
+          return res.status(403).json({ message: "Creator does not have an active subscription." });
+        }
+        resolvedCreatedBy = userInfo.created_by;
+      }
+
       for (let index = 0; index < itemdetails.length; index++) {
         const { itms_id, wvarientid, qnty, l_price, note } = itemdetails[index];
-       
-        // Construct the data to be inserted
+
         const data1 = {
-          check_by: user,             // From userdetails
-          itms_id: itms_id,           // Product ID from itemdetails
-          wvarientid: wvarientid,     // Variant ID from itemdetails
-          qnty: qnty,                 // Quantity from itemdetails
-          l_price: l_price,           // Lost price from itemdetails
-          note: note,                 // Note from itemdetails
-          createdby: saveid,          // Assuming session ID or creator ID
-          created_at: newDate         // Timestamp
+          check_by: user,
+          itms_id: itms_id,
+          wvarientid: wvarientid,
+          qnty: qnty,
+          l_price: l_price,
+          note: note,
+          createdby: resolvedCreatedBy,
+          created_at: newDate
         };
  
         // Insert data into the 'items_food_waste' table

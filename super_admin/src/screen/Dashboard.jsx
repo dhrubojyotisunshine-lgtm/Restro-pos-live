@@ -16,18 +16,19 @@ const headers = [
 ];
 const Dashboard = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  const token = localStorage.getItem("token");
   const [data, setData] = useState([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [plans, setPlans] = useState([]);
   const getCompany = async () => {
-    const response = await axios.get(`${API_BASE_URL}/getcompany`);
+    const response = await axios.get(`${API_BASE_URL}/getcompany`, { headers: { Authorization: token } });
     if (response.status === 200) {
       setData(response.data.data);
     }
   };
   const getallPackages = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/getallpackages`);
+      const res = await axios.get(`${API_BASE_URL}/getallpackages`, { headers: { Authorization: token } });
       setPlans(res.data.data);
     } catch (error) {
       console.log(error);

@@ -211,22 +211,32 @@ const insertCustomer = (name, email, address, phone, created_by, res) => {
 const getCustomerById = async (req, res) => {
   try {
     const { customer_id } = req.params;
-    const getCustomerByIdQuery = `SELECT customer_id,created_by, customer_name, customer_email, customer_phone, customer_address FROM customer_info WHERE customer_id = ?`;
- 
-    db.pool.query(getCustomerByIdQuery, [customer_id], (err, result) => {
-      if (err) {
-        console.log(err);
-        res.status(500).json({ success: false, message: 'An error occurred' });
-      } else if (result.length === 0) {
-        res.status(404).json({ success: false, message: 'Customer not found' });
-      } else {
-        res.status(200).json({ success: true, data: result[0], message: "Customer fetched successfully" });
-      }
+    const userId = req.id;
+
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const getCustomerByIdQuery = `SELECT customer_id, created_by, customer_name, customer_email, customer_phone, customer_address FROM customer_info WHERE customer_id = ? AND created_by = ?`;
+      db.pool.query(getCustomerByIdQuery, [customer_id, creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).json({ success: false, message: "An error occurred" });
+        } else if (result.length === 0) {
+          return res.status(404).json({ success: false, message: "Customer not found" });
+        } else {
+          return res.status(200).json({ success: true, data: result[0], message: "Customer fetched successfully" });
+        }
+      });
     });
   } catch (error) {
-    res.status(500).json({ error: 'An error occurred' });
+    res.status(500).json({ error: "An error occurred" });
   }
-};;
+};
 
 // const updateCustomer = async (req, res) => {
 //   try {
@@ -290,108 +300,88 @@ const getCustomerById = async (req, res) => {
 const updateCustomer = async (req, res) => {
   try {
     const { customer_id } = req.params;
-    const {
-      customer_name,
-      customer_email,
-      customer_address,
-      customer_phone,
-      created_by,
-    } = req.body;
+    const { customer_name, customer_email, customer_address, customer_phone } = req.body;
+    const userId = req.id;
 
-    // Fetch the current data of the customer
-    const fetchCurrentDataSql = "SELECT * FROM customer_info WHERE customer_id = ?";
-    db.pool.query(fetchCurrentDataSql, [customer_id], async (fetchErr, fetchData) => {
-      if (fetchErr) {
-        console.error("Database fetch error: ", fetchErr);
-        return res.status(500).json({ error: "Internal Server Error" });
-      }
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ error: "Internal Server Error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by: uc } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : uc;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-      if (fetchData.length === 0) {
-        return res.status(404).json({ success: false, message: 'Customer not found' });
-      }
-
-      const currentData = fetchData[0];
-
-      // Merge current and new data
-      const updatedData = {
-        customer_name: customer_name !== undefined ? customer_name : currentData.customer_name,
-        customer_email: customer_email !== undefined ? customer_email : currentData.customer_email,
-        customer_address: customer_address !== undefined ? customer_address : currentData.customer_address,
-        customer_phone: customer_phone !== undefined ? customer_phone : currentData.customer_phone,
-        created_by: created_by !== undefined ? created_by : currentData.created_by
-      };
-
-      // ✅ Check for duplicate email or phone before update
-      const checkDuplicateSql = `
-        SELECT * FROM customer_info
-        WHERE (customer_email = ? OR customer_phone = ?)
-        AND customer_id != ?`;
-      
-      db.pool.query(checkDuplicateSql, [
-        updatedData.customer_email,
-        updatedData.customer_phone,
-        customer_id
-      ], (dupErr, dupResults) => {
-        if (dupErr) {
-          console.error("Database duplicate check error: ", dupErr);
-          return res.status(500).json({ success: false, message: 'Error checking duplicates' });
+      const fetchCurrentDataSql = "SELECT * FROM customer_info WHERE customer_id = ? AND created_by = ?";
+      db.pool.query(fetchCurrentDataSql, [customer_id, creatorId], (fetchErr, fetchData) => {
+        if (fetchErr) {
+          console.error("Database fetch error: ", fetchErr);
+          return res.status(500).json({ error: "Internal Server Error" });
         }
-
-        if (dupResults.length > 0) {
-          return res.status(400).json({
-            success: false,
-            message: "Email or Phone number already exists for another customer"
-          });
+        if (fetchData.length === 0) {
+          return res.status(404).json({ success: false, message: "Customer not found" });
         }
+        const currentData = fetchData[0];
+        const updatedData = {
+          customer_name: customer_name !== undefined ? customer_name : currentData.customer_name,
+          customer_email: customer_email !== undefined ? customer_email : currentData.customer_email,
+          customer_address: customer_address !== undefined ? customer_address : currentData.customer_address,
+          customer_phone: customer_phone !== undefined ? customer_phone : currentData.customer_phone,
+          created_by: currentData.created_by,
+        };
 
-        // ✅ No duplicates → proceed with update
-        const updateCustomerQuery = `
-          UPDATE customer_info 
-          SET customer_name = ?, customer_email = ?, customer_address = ?, customer_phone = ?, created_by = ?
-          WHERE customer_id = ?`;
-        
-        db.pool.query(updateCustomerQuery, [
-          updatedData.customer_name,
-          updatedData.customer_email,
-          updatedData.customer_address,
-          updatedData.customer_phone,
-          updatedData.created_by,
-          customer_id
-        ], (err, result) => {
-          if (err) {
-            console.error("Database query error: ", err);
-            return res.status(500).json({ success: false, message: 'An error occurred' });
-          } else if (result.affectedRows === 0) {
-            return res.status(404).json({ success: false, message: 'Customer not found' });
-          } else {
-            return res.status(200).json({ success: true, message: "Customer updated successfully" });
+        const checkDuplicateSql = `SELECT * FROM customer_info WHERE (customer_email = ? OR customer_phone = ?) AND customer_id != ?`;
+        db.pool.query(checkDuplicateSql, [updatedData.customer_email, updatedData.customer_phone, customer_id], (dupErr, dupResults) => {
+          if (dupErr) {
+            console.error("Database duplicate check error: ", dupErr);
+            return res.status(500).json({ success: false, message: "Error checking duplicates" });
           }
+          if (dupResults.length > 0) {
+            return res.status(400).json({ success: false, message: "Email or Phone number already exists for another customer" });
+          }
+          const updateCustomerQuery = `UPDATE customer_info SET customer_name = ?, customer_email = ?, customer_address = ?, customer_phone = ?, created_by = ? WHERE customer_id = ?`;
+          db.pool.query(updateCustomerQuery, [updatedData.customer_name, updatedData.customer_email, updatedData.customer_address, updatedData.customer_phone, updatedData.created_by, customer_id], (err, result) => {
+            if (err) {
+              console.error("Database query error: ", err);
+              return res.status(500).json({ success: false, message: "An error occurred" });
+            } else if (result.affectedRows === 0) {
+              return res.status(404).json({ success: false, message: "Customer not found" });
+            } else {
+              return res.status(200).json({ success: true, message: "Customer updated successfully" });
+            }
+          });
         });
       });
     });
   } catch (error) {
     console.error("Update customer error: ", error);
-    return res.status(500).json({ success: false, message: 'An error occurred' });
+    return res.status(500).json({ success: false, message: "An error occurred" });
   }
 };
 
 const deleteCustomer = async (req, res) => {
   try {
-    const { customer_id } = req.params; 
+    const { customer_id } = req.params;
+    const userId = req.id;
 
-    const deleteCustomerQuery = `DELETE FROM customer_info WHERE customer_id = ?`;
-    
-    db.pool.query(deleteCustomerQuery, [customer_id], (err, result) => {
-      if (err) {
-        console.log(err);
-        res.status(500).json({ success: false, message: "An error occurred" });
-      } else if (result.affectedRows === 0) {
-        res.status(404).json({ success: false, message: "Customer not found" });
-      } else {
-        res
-          .status(200)
-          .json({ success: true, message: "Customer deleted successfully" });
-      }
+    const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+    db.pool.query(userQuery, [userId], (err, userResult) => {
+      if (err) return res.status(500).json({ success: false, message: "Server error" });
+      if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+      const { is_admin, created_by } = userResult[0];
+      const creatorId = is_admin === 1 ? userId : created_by;
+      if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+      const deleteCustomerQuery = "DELETE FROM customer_info WHERE customer_id = ? AND created_by = ?";
+      db.pool.query(deleteCustomerQuery, [customer_id, creatorId], (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.status(500).json({ success: false, message: "An error occurred" });
+        } else if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Customer not found" });
+        } else {
+          return res.status(200).json({ success: true, message: "Customer deleted successfully" });
+        }
+      });
     });
   } catch (error) {
     res.status(500).json({ error: "An error occurred" });

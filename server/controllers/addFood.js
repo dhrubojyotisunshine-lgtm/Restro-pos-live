@@ -4,137 +4,7 @@ const path = require("path");
 const XLSX = require("xlsx");
 
 // const createItemFood = (req, res) => {
-//   const {
-//     CategoryID,
-//     ProductName,
-//     descrp,
-//     productvat,
-//     special,
-//     isoffer,
-//     offerstartdate,
-//     offerenddate,
-//     is_custom_quantity,
-//     status,
-//     menuid,
-//     variant,
-//     addons,
-//   } = req.body;
-//   console.log(req.body,"foooooooooood")
-
-//   const user_id = req.id;
-//   const ProductImage = req.file ? req.file.filename : null;
-//   const isofferint = isoffer === "true" ? 1 : 0;
-//   const is_custom_quantityint = is_custom_quantity === "true" ? 1 : 0;
-//   const specialint = special === "true" ? 1 : 0;
-
-//   const parsedVariant = JSON.parse(variant || "[]");
-//   const parsedAddons = JSON.parse(addons || "[]");
-
-//   // Step 1: Check if user has a subscription
-//   const checkSubscriptionQuery = "SELECT * FROM superadmin_user_plans WHERE user_id = ?";
-//   db.pool.query(checkSubscriptionQuery, [user_id], (err, results) => {
-//     if (err) return res.status(500).send(err);
-
-//     const proceedWithInsert = (created_by) => {
-//       // Insert into item_foods
-//       const sql1 = `
-//         INSERT INTO item_foods(CategoryID, UserIDInserted, kitchenid, ProductName, descrip, ProductImage, productvat, special, offerIsavailable, offerstartdate, offerendate, is_customqty, ProductsIsActive, menutype)
-//         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-//       `;
-//       const values1 = [
-//         CategoryID,
-//         user_id,
-//         kitchenid,
-//         ProductName,
-//         descrp,
-//         ProductImage,
-//         productvat,
-//         specialint,
-//         isofferint,
-//         offerstartdate,
-//         offerenddate,
-//         is_custom_quantityint,
-//         status,
-//         menuid,
-//       ];
-
-//       db.pool.query(sql1, values1, (err, result1) => {
-//         if (err) {
-//           console.error("Error inserting into item_foods:", err);
-//           return res.status(500).json({ error: "Internal Server Error", details: err });
-//         }
-
-//         const insertedItemId = result1.insertId;
-
-//         // Insert variants
-//         const sql2 = `INSERT INTO variant(menuid, price, variantName) VALUES (?, ?, ?)`;
-//         const variantPromises = Array.isArray(parsedVariant)
-//           ? parsedVariant.map(({ price, variantName }) => {
-//               const values2 = [insertedItemId, price, variantName];
-//               return new Promise((resolve, reject) => {
-//                 db.pool.query(sql2, values2, (err, result2) => {
-//                   if (err) reject(err);
-//                   else resolve(result2);
-//                 });
-//               });
-//             })
-//           : [];
-
-//         // Insert addons
-//         const sql3 = `INSERT INTO menu_add_on (menu_id, add_on_id, is_active) VALUES (?, ?, 1)`;
-//         const addonPromises = Array.isArray(parsedAddons)
-//           ? parsedAddons.map((addon_id) => {
-//               const values3 = [insertedItemId, addon_id];
-//               return new Promise((resolve, reject) => {
-//                 db.pool.query(sql3, values3, (err, result3) => {
-//                   if (err) reject(err);
-//                   else resolve(result3);
-//                 });
-//               });
-//             })
-//           : [];
-
-//         Promise.all([...variantPromises, ...addonPromises])
-//           .then(() => {
-//             res.status(201).json({
-//               message: "Product, variants, and addons created successfully",
-//             });
-//           })
-//           .catch((err) => {
-//             console.error("Error inserting variants or addons:", err);
-//             res.status(500).json({ error: "Internal Server Error", details: err });
-//           });
-//       });
-//     };
-
-//     if (results.length > 0) {
-//       // User has a subscription
-//       proceedWithInsert(user_id);
-//     } else {
-//       // Step 2: Check who created this user
-//       const checkUserCreatedByQuery = "SELECT created_by FROM user WHERE id = ?";
-//       db.pool.query(checkUserCreatedByQuery, [user_id], (err, data) => {
-//         if (err) return res.status(500).send(err);
-
-//         if (data.length === 0 || !data[0].created_by) {
-//           return res.status(403).json({ message: "You are not authorized to create item." });
-//         }
-
-//         const creator_id = data[0].created_by;
-
-//         // Step 3: Check if creator has subscription
-//         db.pool.query(checkSubscriptionQuery, [creator_id], (err, subResults) => {
-//           if (err) return res.status(500).send(err);
-
-//           if (subResults.length > 0) {
-//             proceedWithInsert(user_id);
-//           } else {
-//             return res.status(403).json({ message: "Creator does not have an active subscription." });
-//           }
-//         });
-//       });
-//     }
-//   });
+//   ... (old version - see git history)
 // };
 
 const createItemFood = (req, res) => {
@@ -226,10 +96,10 @@ const createItemFood = (req, res) => {
 
           // Insert variants
           const sql2 =
-            "INSERT INTO variant(menuid, price, variantName) VALUES (?, ?, ?)";
+            "INSERT INTO variant(menuid, price, variantName, created_by) VALUES (?, ?, ?, ?)";
           const variantPromises = Array.isArray(parsedVariant)
             ? parsedVariant.map(({ price, variantName }) => {
-                const values2 = [insertedItemId, price, variantName];
+                const values2 = [insertedItemId, price, variantName, created_by];
                 return new Promise((resolve, reject) => {
                   db.pool.query(sql2, values2, (err, result2) => {
                     if (err) reject(err);
@@ -313,8 +183,18 @@ const bulkUploadFoodItems = async (req, res) => {
   }
 
   const filePath = req.file.path;
+  const userId = req.id;
 
   try {
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?",
+      [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+
     const workbook = XLSX.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
@@ -336,46 +216,46 @@ const bulkUploadFoodItems = async (req, res) => {
     // 🔹 Prepare SQL query (Bulk insert)
     const sql = `
       INSERT INTO item_foods (
-        CategoryID, UserIDInserted, kitchenid, ProductName, descrip, 
-        ProductImage, productvat, special, offerIsavailable, 
+        CategoryID, UserIDInserted, kitchenid, ProductName, descrip,
+        ProductImage, productvat, special, offerIsavailable,
         offerstartdate, offerendate, is_customqty, ProductsIsActive, menutype
-      ) 
+      )
       VALUES ?
     `;
 
     const values = foodItems.map((item) => [
       item.CategoryID,
-      req.id || 1, // User ID from token
+      creatorId,
       item.kitchenid || null,
       item.ProductName.trim(),
       item.descrip || null,
-      null, // ProductImage (not provided in your code)
+      null,
       item.productvat || 0,
       item.special || 0,
       item.isoffer || 0,
       item.offerstartdate || null,
       item.offerenddate || null,
       item.is_custom_quantity || 0,
-      item.status || 1, // Default active
+      item.status || 1,
       item.menuid || null,
     ]);
 
     // 🔹 Use promise-based query
     const [result] = await db.pool.promise().query(sql, [values]);
 
-    const insertedItemIds = result.insertId; // First inserted ID
-    const affectedRows = result.affectedRows; // Number of inserted rows
+    const insertedItemIds = result.insertId;
+    const affectedRows = result.affectedRows;
 
     // 🔹 Handle Variant Insertions
     if (foodItems.some((item) => item.variant)) {
-      const variantSql = `INSERT INTO variant (menuid, price, variantName) VALUES ?`;
+      const variantSql = `INSERT INTO variant (menuid, price, variantName, created_by) VALUES ?`;
       const variantValues = [];
 
       foodItems.forEach((item, index) => {
         if (item.variant) {
           const variants = JSON.parse(item.variant);
           variants.forEach(({ price, variantName }) => {
-            variantValues.push([insertedItemIds + index, price, variantName]);
+            variantValues.push([insertedItemIds + index, price, variantName, creatorId]);
           });
         }
       });
@@ -411,7 +291,9 @@ const bulkUploadFoodItems = async (req, res) => {
     console.error("Error processing file:", error);
     res.status(500).json({ error: "Internal Server Error" });
   } finally {
-    fs.unlinkSync(filePath); // Remove the uploaded file after processing
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
   }
 };
 
@@ -499,11 +381,11 @@ const getAllItemFoodDetails = async (req, res) => {
             const queryVariants = `
               SELECT v.*
               FROM variant v
-              WHERE v.menuid = ?
+              WHERE v.menuid = ? AND v.created_by = ?
             `;
             db.pool.query(
               queryVariants,
-              [product.productsID],
+              [product.ProductsID || product.productsID, createdBy],
               (err, result) => {
                 if (err) {
                   reject(err);
@@ -530,156 +412,176 @@ const getAllItemFoodDetails = async (req, res) => {
 };
 
 const deleteItemFood = (req, res) => {
-  const ProductsID = req.params.ProductsID; // Extract ProductsID from URL params
+  const ProductsID = req.params.ProductsID;
+  const userId = req.id;
 
-  // First fetch the ProductImage filename from item_foods
-  const sqlFetchImage = `SELECT ProductImage FROM item_foods WHERE ProductsID = ?`;
-  db.pool.query(sqlFetchImage, [ProductsID], (err, result) => {
-    if (err) {
-      console.error("Error fetching ProductImage:", err);
-      return res
-        .status(500)
-        .json({ error: "Internal Server Error", details: err });
-    }
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
 
-    // Check if a record with ProductsID exists
-    if (result.length === 0) {
-      return res.status(404).json({ error: "Product not found" });
-    }
-
-    const imageFilename = result[0].ProductImage;
-
-    const sqlDeleteItemFood = `DELETE FROM item_foods WHERE ProductsID = ?`;
-    db.pool.query(sqlDeleteItemFood, [ProductsID], (err, result) => {
+    // Verify ownership before fetching image or deleting
+    const sqlFetchImage = `SELECT ProductImage FROM item_foods WHERE ProductsID = ? AND UserIDInserted = ?`;
+    db.pool.query(sqlFetchImage, [ProductsID, creatorId], (err, result) => {
       if (err) {
-        console.error("Error deleting item_food:", err);
+        console.error("Error fetching ProductImage:", err);
         return res
           .status(500)
           .json({ error: "Internal Server Error", details: err });
       }
 
-      // If there was a ProductImage associated, delete the image file
-      if (imageFilename) {
-        const imagePath = path.join(
-          __dirname,
-          "../asset/category",
-          imageFilename
-        );
-        if (fs.existsSync(imagePath)) {
-          fs.unlink(imagePath, (unlinkErr) => {
-            if (unlinkErr) {
-              console.error("Error deleting image file:", unlinkErr);
-              return res
-                .status(500)
-                .json({ error: "Internal Server Error", details: unlinkErr });
-            }
-            return res.json({
-              message: "Product and image file deleted successfully",
+      if (result.length === 0) {
+        return res.status(404).json({ error: "Product not found" });
+      }
+
+      const imageFilename = result[0].ProductImage;
+
+      const sqlDeleteVariants = `DELETE FROM variant WHERE menuid = ?`;
+      db.pool.query(sqlDeleteVariants, [ProductsID], () => {});
+
+      const sqlDeleteItemFood = `DELETE FROM item_foods WHERE ProductsID = ?`;
+      db.pool.query(sqlDeleteItemFood, [ProductsID], (err, result) => {
+        if (err) {
+          console.error("Error deleting item_food:", err);
+          return res
+            .status(500)
+            .json({ error: "Internal Server Error", details: err });
+        }
+
+        // If there was a ProductImage associated, delete the image file
+        if (imageFilename) {
+          const imagePath = path.join(
+            __dirname,
+            "../asset/category",
+            imageFilename
+          );
+          if (fs.existsSync(imagePath)) {
+            fs.unlink(imagePath, (unlinkErr) => {
+              if (unlinkErr) {
+                console.error("Error deleting image file:", unlinkErr);
+                return res
+                  .status(500)
+                  .json({ error: "Internal Server Error", details: unlinkErr });
+              }
+              return res.json({
+                message: "Product and image file deleted successfully",
+              });
             });
-          });
+          } else {
+            return res.json({
+              message: "Product  deleted successfully, image file not found",
+            });
+          }
         } else {
-          // Image file not found, still consider deletion successful
           return res.json({
-            message: "Product  deleted successfully, image file not found",
+            message: "Product  deleted successfully, no associated image",
           });
         }
-      } else {
-        // No image associated, return success message
-        return res.json({
-          message: "Product  deleted successfully, no associated image",
-        });
-      }
+      });
     });
   });
 };
 
 const getItemFoodDetails = (req, res) => {
   const ProductsID = req.params.ProductID;
+  const userId = req.id;
 
-  // Query to fetch product details
-  const productDetailsQuery = `
-    SELECT
-      item_foods.*,
-      item_category.*,
-      kitchens.*,
-      tbl_menutype.*
-    FROM
-      item_foods
-    LEFT JOIN item_category ON item_foods.CategoryID = item_category.CategoryID
-    LEFT JOIN kitchens ON item_foods.kitchenid = kitchens.id
-    LEFT JOIN tbl_menutype ON item_foods.menutype = tbl_menutype.menutypeid
-    WHERE
-      item_foods.ProductsIsActive = 1 AND item_foods.ProductsID = ?;
-  `;
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ error: "Server error" });
+    if (!userResult.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
 
-  // Query to fetch add-ons data
-  const addonsQuery = `
-    SELECT
-      menu_add_on.add_on_id,
-      add_ons.price ,
-      add_ons.add_on_name
-    FROM
-      menu_add_on
-    LEFT JOIN add_ons ON menu_add_on.add_on_id = add_ons.add_on_id
-    WHERE
-      menu_add_on.is_active = 1 AND menu_add_on.menu_id = ?;
-  `;
+    // Query to fetch product details — with ownership check
+    const productDetailsQuery = `
+      SELECT
+        item_foods.*,
+        item_category.*,
+        kitchens.*,
+        tbl_menutype.*
+      FROM
+        item_foods
+      LEFT JOIN item_category ON item_foods.CategoryID = item_category.CategoryID
+      LEFT JOIN kitchens ON item_foods.kitchenid = kitchens.id
+      LEFT JOIN tbl_menutype ON item_foods.menutype = tbl_menutype.menutypeid
+      WHERE
+        item_foods.ProductsIsActive = 1 AND item_foods.ProductsID = ? AND item_foods.UserIDInserted = ?;
+    `;
 
-  // Query to fetch variants data
-  const variantsQuery = `
-    SELECT
-      variant.*
-    FROM
-      variant
-    WHERE
-      variant.menuid = ?;
-  `;
+    // Query to fetch add-ons data
+    const addonsQuery = `
+      SELECT
+        menu_add_on.add_on_id,
+        add_ons.price ,
+        add_ons.add_on_name
+      FROM
+        menu_add_on
+      LEFT JOIN add_ons ON menu_add_on.add_on_id = add_ons.add_on_id
+      WHERE
+        menu_add_on.is_active = 1 AND menu_add_on.menu_id = ?;
+    `;
 
-  // Execute all queries concurrently
-  Promise.all([
-    new Promise((resolve, reject) => {
-      db.pool.query(productDetailsQuery, [ProductsID], (err, results) => {
-        if (err) {
-          return reject(err);
+    // Query to fetch variants data
+    const variantsQuery = `
+      SELECT
+        variant.*
+      FROM
+        variant
+      WHERE
+        variant.menuid = ?;
+    `;
+
+    // Execute all queries concurrently
+    Promise.all([
+      new Promise((resolve, reject) => {
+        db.pool.query(productDetailsQuery, [ProductsID, creatorId], (err, results) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(results);
+        });
+      }),
+      new Promise((resolve, reject) => {
+        db.pool.query(addonsQuery, [ProductsID], (err, results) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(results);
+        });
+      }),
+      new Promise((resolve, reject) => {
+        db.pool.query(variantsQuery, [ProductsID], (err, results) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve(results);
+        });
+      }),
+    ])
+      .then(([productDetails, addons, variants]) => {
+        if (productDetails.length === 0) {
+          return res.status(404).json({ error: "No product details found" });
         }
-        resolve(results);
-      });
-    }),
-    new Promise((resolve, reject) => {
-      db.pool.query(addonsQuery, [ProductsID], (err, results) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(results);
-      });
-    }),
-    new Promise((resolve, reject) => {
-      db.pool.query(variantsQuery, [ProductsID], (err, results) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(results);
-      });
-    }),
-  ])
-    .then(([productDetails, addons, variants]) => {
-      if (productDetails.length === 0) {
-        return res.status(404).json({ error: "No product details found" });
-      }
 
-      res.status(200).json({
-        productDetails: productDetails[0], // Assuming you want to return the first product detail
-        addons: addons.length > 0 ? addons : [], // If no addons, return an empty array
-        variants: variants.length > 0 ? variants : [], // If no variants, return an empty array
+        res.status(200).json({
+          productDetails: productDetails[0],
+          addons: addons.length > 0 ? addons : [],
+          variants: variants.length > 0 ? variants : [],
+        });
+      })
+      .catch((error) => {
+        console.error("Error fetching details:", error);
+        res.status(500).json({ error: "Internal Server Error", details: error });
       });
-    })
-    .catch((error) => {
-      console.error("Error fetching details:", error);
-      res.status(500).json({ error: "Internal Server Error", details: error });
-    });
+  });
 };
 
-const updateItemFood = (req, res) => {
+const updateItemFood = async (req, res) => {
   const {
     CategoryID,
     kitchenid,
@@ -687,13 +589,13 @@ const updateItemFood = (req, res) => {
     descrip,
     productvat,
     special,
-    offerIsavailable, // Changed from isoffer
+    offerIsavailable,
     offerstartdate,
     offerenddate,
-    is_customqty, // Changed from is_custom_quantity
-    ProductsIsActive, // Changed from status
-    menutypeid, // Changed from menuid
-    variants, // This should be a JSON string of an array of objects
+    is_customqty,
+    ProductsIsActive,
+    menutypeid,
+    variants,
     addons,
     UserIDInserted,
   } = req.body;
@@ -701,6 +603,7 @@ const updateItemFood = (req, res) => {
   console.log("User ID:", req.id, "updatefood");
   const ProductsID = req.params.ProductID;
   const ProductImage = req.file ? req.file.filename : null;
+  const userId = req.id;
 
   // Convert checkbox values to integers (they come as strings from formData)
   const specialInt = special ? parseInt(special) : 0;
@@ -739,9 +642,24 @@ const updateItemFood = (req, res) => {
     return res.status(400).json({ error: "Invalid addons JSON format" });
   }
 
-  // Fetch existing item_food data
-  const sqlFetch = `SELECT * FROM item_foods WHERE ProductsID = ?`;
-  db.pool.query(sqlFetch, [ProductsID], (err, existingData) => {
+  // Resolve tenant creatorId
+  let creatorId;
+  try {
+    const [userRows] = await db.pool.promise().query(
+      "SELECT is_admin, created_by FROM user WHERE id = ?",
+      [userId]
+    );
+    if (!userRows.length) return res.status(404).json({ error: "User not found" });
+    const { is_admin, created_by } = userRows[0];
+    creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ error: "Unauthorized" });
+  } catch (e) {
+    return res.status(500).json({ error: "Server error" });
+  }
+
+  // Fetch existing item_food data — verify ownership
+  const sqlFetch = `SELECT * FROM item_foods WHERE ProductsID = ? AND UserIDInserted = ?`;
+  db.pool.query(sqlFetch, [ProductsID, creatorId], (err, existingData) => {
     if (err) {
       console.error("Error fetching existing item_food data:", err);
       return res
@@ -808,9 +726,9 @@ const updateItemFood = (req, res) => {
 
     // Update item_foods
     const sql1 = `UPDATE item_foods
-                  SET CategoryID = ?, UserIDInserted = ?, kitchenid = ?, ProductName = ?, 
-                      descrip = ?, ProductImage = ?, productvat = ?, special = ?, 
-                      offerIsavailable = ?, offerstartdate = ?, offerendate = ?, 
+                  SET CategoryID = ?, UserIDInserted = ?, kitchenid = ?, ProductName = ?,
+                      descrip = ?, ProductImage = ?, productvat = ?, special = ?,
+                      offerIsavailable = ?, offerstartdate = ?, offerendate = ?,
                       is_customqty = ?, ProductsIsActive = ?, menutype = ?
                   WHERE ProductsID = ?`;
 
@@ -858,10 +776,10 @@ const updateItemFood = (req, res) => {
 
         // Insert new variants
         if (parsedVariants.length > 0) {
-          const sql2 = `INSERT INTO variant (menuid, price, variantName) VALUES (?, ?, ?)`;
+          const sql2 = `INSERT INTO variant (menuid, price, variantName, created_by) VALUES (?, ?, ?, ?)`;
           const variantPromises = parsedVariants.map(
             ({ price, variantName }) => {
-              const values2 = [ProductsID, price, variantName];
+              const values2 = [ProductsID, price, variantName, creatorId];
               return new Promise((resolve, reject) => {
                 db.pool.query(sql2, values2, (err, result2) => {
                   if (err) {

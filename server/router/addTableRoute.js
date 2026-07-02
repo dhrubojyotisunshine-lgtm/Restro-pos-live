@@ -30,12 +30,12 @@ router.post(
   tableController.createTable,
 );
 router.get("/table", auth, tableController.getTables);
-router.get("/table/:id", tableController.getTableById);
-router.delete("/deletetable/:id", tableController.deleteTable);
-router.get("/bookedtable", tableController.getBookedTable);
-router.get("/unbookedtable", tableController.getunBookedTable);
-router.put("/table/:tableId", tableController.cleartable);
+router.get("/table/:id", auth, tableController.getTableById);
+router.delete("/deletetable/:id", auth, tableController.deleteTable);
+router.get("/bookedtable", auth, tableController.getBookedTable);
+router.get("/unbookedtable", auth, tableController.getunBookedTable);
+router.put("/table/:tableId", auth, tableController.cleartable);
 
-router.put("/updatetable/:tableid", tableController.updateTable);
+router.put("/updatetable/:tableid", auth, tableController.updateTable);
 // delete and update left
 module.exports = router;

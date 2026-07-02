@@ -120,7 +120,13 @@ app.get("/restro-frontend/*", (req, res) => {
   res.sendFile(path.join(__dirname, "restro-frontend", "index.html"));
 });
 
-app.get(/^\/(?!api).*/, (req, res) => {
+// Return 404 for missing image/asset files instead of redirecting to login
+app.get(/\.(jpg|jpeg|png|gif|svg|webp|ico|bmp)$/i, (req, res) => {
+  res.status(404).end();
+});
+
+// Catch-all: redirect unknown routes to login, but exclude known SPA paths to prevent redirect loops
+app.get(/^\/(?!api|login|frontend|superadmin|restro-frontend).*/, (req, res) => {
   res.redirect("/login");
 });
 

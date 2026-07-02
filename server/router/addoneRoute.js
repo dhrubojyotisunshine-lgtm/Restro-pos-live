@@ -6,11 +6,11 @@ const addOnController = require("../controllers/addOns");
 
 router.get("/addons", auth,addOnController.getAddOns);
 router.get("/getActiveAddOns",auth,addOnController.getActiveAddOns);
-router.get("/addonbyid/:id",addOnController.getAddOnsById)
+router.get("/addonbyid/:id", auth, addOnController.getAddOnsById);
 // POST request to create a new add-on
 router.post("/addons", auth,addOnController.createAddOn);
-router.post("/createAddOnWithAssign", addOnController.createAddOnWithAssign);
-router.put("/addons/:add_on_Id", addOnController.updateAddOn);
-router.delete("/addons/:id", addOnController.deleteAddOn);
+router.post("/createAddOnWithAssign", auth, addOnController.createAddOnWithAssign);
+router.put("/addons/:add_on_Id", auth, addOnController.updateAddOn);
+router.delete("/addons/:id", auth, addOnController.deleteAddOn);
 
 module.exports = router;

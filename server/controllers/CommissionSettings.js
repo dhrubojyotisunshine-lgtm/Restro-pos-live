@@ -2,11 +2,9 @@ const db = require("../utils/db");
 
 
 const createCommissionSetting = (req, res) => {
-  // const { pos_id, rate } = req.body;
+  const { pos_id, rate } = req.body;
   const user_id = req.id;
-   const pos_id = user_id; 
-  const rate = 0; 
-  
+
   // Step 1: Check if the user has a subscription
   const checkSubscriptionQuery = "SELECT * FROM superadmin_user_plans WHERE user_id = ?";
   db.pool.query(checkSubscriptionQuery, [user_id], (err, results) => {
@@ -46,7 +44,7 @@ const createCommissionSetting = (req, res) => {
  
           if (results.length > 0) {
             const insertQuery = `
-              INSERT INTO payroll_commission_setting (pos_id, rate, create_by)
+              INSERT INTO payroll_commission_setting (pos_id, rate, created_by)
               VALUES (?, ?, ?)
             `;
             const values = [pos_id, rate, created_by];
@@ -66,25 +64,32 @@ const createCommissionSetting = (req, res) => {
 
 const getCommissionSettingById = (req, res) => {
   const { id } = req.params;
+  const userId = req.id;
 
-  const query = `
-    SELECT pcs.*, p.position_name, pcs.rate
-    FROM payroll_commission_setting pcs
-    LEFT JOIN position p ON pcs.pos_id = p.pos_id
-    WHERE pcs.id = ?
-  `;
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-  db.pool.query(query, [id], (err, results) => {
-    if (err) {
-      console.error('Database fetch error:', err);
-      return res.status(500).json({ success: false, message: 'An error occurred while fetching the commission setting' });
-    }
-
-    if (results.length === 0) {
-      return res.status(404).json({ success: false, message: 'Commission setting not found' });
-    }
-
-    res.status(200).json({ success: true, data: results[0] });
+    const query = `
+      SELECT pcs.*, p.position_name, pcs.rate
+      FROM payroll_commission_setting pcs
+      LEFT JOIN position p ON pcs.pos_id = p.pos_id
+      WHERE pcs.id = ? AND pcs.created_by = ?
+    `;
+    db.pool.query(query, [id, creatorId], (err, results) => {
+      if (err) {
+        console.error("Database fetch error:", err);
+        return res.status(500).json({ success: false, message: "An error occurred while fetching the commission setting" });
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ success: false, message: "Commission setting not found" });
+      }
+      res.status(200).json({ success: true, data: results[0] });
+    });
   });
 };
 
@@ -158,51 +163,42 @@ const getCommissionSettingById = (req, res) => {
   
 const updateCommissionSetting = (req, res) => {
   const { id } = req.params;
-  const { rate, created_by } = req.body;
- console.log(req.body)
-  const query = 'SELECT * FROM payroll_commission_setting WHERE id = ?';
-  db.pool.query(query, [id], (err, results) => {
-    if (err) {
-      console.error('Database fetch error:', err);
-      return res.status(500).json({
-        success: false,
-        message: 'An error occurred while fetching the commission setting',
-      });
-    }
- 
-    if (results.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Commission setting not found',
-      });
-    }
- 
-    const currentData = results[0];
-    const updateData = {
-      rate: rate !== undefined ? rate : currentData.rate,
-      created_by: created_by !== undefined ? created_by : currentData.created_by,
-    };
- 
-    const updateQuery = 'UPDATE payroll_commission_setting SET rate = ?, created_by = ? WHERE id = ?';
-    db.pool.query(updateQuery, [updateData.rate, updateData.created_by, id], (err, result) => {
+  const { rate } = req.body;
+  const userId = req.id;
+  console.log(req.body);
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by: uc } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : uc;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const query = "SELECT * FROM payroll_commission_setting WHERE id = ? AND created_by = ?";
+    db.pool.query(query, [id, creatorId], (err, results) => {
       if (err) {
-        console.error('Database update error:', err);
-        return res.status(500).json({
-          success: false,
-          message: 'An error occurred while updating the commission setting',
-        });
+        console.error("Database fetch error:", err);
+        return res.status(500).json({ success: false, message: "An error occurred while fetching the commission setting" });
       }
- 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({
-          success: false,
-          message: 'Commission setting not found',
-        });
+      if (results.length === 0) {
+        return res.status(404).json({ success: false, message: "Commission setting not found" });
       }
- 
-      res.status(200).json({
-        success: true,
-        message: 'Commission setting updated successfully',
+      const currentData = results[0];
+      const updateData = {
+        rate: rate !== undefined ? rate : currentData.rate,
+        created_by: currentData.created_by,
+      };
+      const updateQuery = "UPDATE payroll_commission_setting SET rate = ?, created_by = ? WHERE id = ?";
+      db.pool.query(updateQuery, [updateData.rate, updateData.created_by, id], (err, result) => {
+        if (err) {
+          console.error("Database update error:", err);
+          return res.status(500).json({ success: false, message: "An error occurred while updating the commission setting" });
+        }
+        if (result.affectedRows === 0) {
+          return res.status(404).json({ success: false, message: "Commission setting not found" });
+        }
+        res.status(200).json({ success: true, message: "Commission setting updated successfully" });
       });
     });
   });
@@ -211,16 +207,27 @@ const updateCommissionSetting = (req, res) => {
 
 const deleteCommissionSetting = (req, res) => {
   const { id } = req.params;
-  const query = 'DELETE FROM payroll_commission_setting WHERE id = ?';
-  db.pool.query(query, [id], (err, result) => {
-    if (err) {
-      console.error('Database delete error:', err);
-      return res.status(500).json({ success: false, message: 'An error occurred while deleting the commission setting' });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: 'Commission setting not found' });
-    }
-    res.status(200).json({ success: true, message: 'Commission setting deleted successfully' });
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const query = "DELETE FROM payroll_commission_setting WHERE id = ? AND created_by = ?";
+    db.pool.query(query, [id, creatorId], (err, result) => {
+      if (err) {
+        console.error("Database delete error:", err);
+        return res.status(500).json({ success: false, message: "An error occurred while deleting the commission setting" });
+      }
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ success: false, message: "Commission setting not found" });
+      }
+      res.status(200).json({ success: true, message: "Commission setting deleted successfully" });
+    });
   });
 };
 const createUserPosition = (req, res) => {
@@ -331,47 +338,82 @@ const getAllUserPositions = (req, res) => {
 // Get one by ID
 const getUserPositionById = (req, res) => {
   const { id } = req.params;
- 
-  const query = `
-    SELECT
-      up.*,
-      p.position_name,
-      CONCAT(u.firstname, " ", u.lastname) AS full_name
-    FROM user_position up
-    LEFT JOIN user u ON u.id = up.user_id
-    LEFT JOIN position p ON up.pos_id = p.pos_id
-    WHERE up.id = ?
-  `;
- 
-  db.pool.query(query, [id], (err, results) => {
-    if (err) {
-      return res.status(500).json({ success: false, error: err });
-    }
-    if (results.length === 0) {
-      return res.status(404).json({ success: false, message: "Not found" });
-    }
-    res.status(200).json({ success: true, data: results[0] });
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const query = `
+      SELECT
+        up.*,
+        p.position_name,
+        CONCAT(u.firstname, " ", u.lastname) AS full_name
+      FROM user_position up
+      LEFT JOIN user u ON u.id = up.user_id
+      LEFT JOIN position p ON up.pos_id = p.pos_id
+      WHERE up.id = ? AND up.created_by = ?
+    `;
+    db.pool.query(query, [id, creatorId], (err, results) => {
+      if (err) {
+        return res.status(500).json({ success: false, error: err });
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ success: false, message: "Not found" });
+      }
+      res.status(200).json({ success: true, data: results[0] });
+    });
   });
 };
 
 const updateUserPosition = (req, res) => {
   const { id } = req.params;
-  const { user_id, pos_id,created_by } = req.body;
- 
-  const updateQuery = "UPDATE user_position SET user_id = ?, pos_id = ?,created_by=? WHERE id = ?";
- 
-  db.pool.query(updateQuery, [user_id, pos_id,created_by, id], (err, result) => {
-    if (err) return res.status(500).json({ success: false, error: err });
-    res.status(200).json({ success: true, message: "Updated successfully" });
+  const { user_id, pos_id } = req.body;
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by: uc } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : uc;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    const ownerCheckQuery = "SELECT created_by FROM user_position WHERE id = ? AND created_by = ?";
+    db.pool.query(ownerCheckQuery, [id, creatorId], (err, rows) => {
+      if (err) return res.status(500).json({ success: false, error: err });
+      if (!rows.length) return res.status(404).json({ success: false, message: "User position not found" });
+
+      const updateQuery = "UPDATE user_position SET user_id = ?, pos_id = ?, created_by = ? WHERE id = ?";
+      db.pool.query(updateQuery, [user_id, pos_id, rows[0].created_by, id], (err, result) => {
+        if (err) return res.status(500).json({ success: false, error: err });
+        res.status(200).json({ success: true, message: "Updated successfully" });
+      });
+    });
   });
 };
 
 const deleteUserPosition = (req, res) => {
   const { id } = req.params;
- 
-  db.pool.query("DELETE FROM user_position WHERE id = ?", [id], (err, result) => {
-    if (err) return res.status(500).json({ success: false, error: err });
-    res.status(200).json({ success: true, message: "Deleted successfully" });
+  const userId = req.id;
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [userId], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: "Server error" });
+    if (!userResult.length) return res.status(404).json({ success: false, message: "User not found" });
+    const { is_admin, created_by } = userResult[0];
+    const creatorId = is_admin === 1 ? userId : created_by;
+    if (!creatorId) return res.status(403).json({ success: false, message: "Unauthorized" });
+
+    db.pool.query("DELETE FROM user_position WHERE id = ? AND created_by = ?", [id, creatorId], (err, result) => {
+      if (err) return res.status(500).json({ success: false, error: err });
+      if (result.affectedRows === 0) return res.status(404).json({ success: false, message: "User position not found" });
+      res.status(200).json({ success: true, message: "Deleted successfully" });
+    });
   });
 };
 

@@ -99,25 +99,28 @@ const AllPackages = () => {
   // };
   const handleEditClick = (id) => {
     setEditId(id);
-    setIsModalOpen(true);
-
-    // Fetch data for the given ID
-    axios.get(`${API_BASE_URL}/getpackages/${id}`).then((response) => {
-      const data = response.data.data;
-
-      setFormData2({
-        package_name: data.package_name,
-        price_interval: data.price_interval.toLowerCase(), // Convert to lowercase to match option values
-        price: data.price_with_currency,
-        number_of_active_users: data.number_of_active_users,
-        interval_value: data.interval_value,
-        package_description: data.package_description,
-        number_of_invoice: data.number_of_invoice,
-        status: data.status.toLowerCase(), // Convert to lowercase to match option values
-        trial_days: data.trial_days,
-        currency: data.currency.toString(), // Ensure it's a string to match option values
+    axios
+      .get(`${API_BASE_URL}/getpackages/${id}`)
+      .then((response) => {
+        const data = response.data.data;
+        setFormData2({
+          package_name: data.package_name,
+          price_interval: data.price_interval?.toLowerCase() || "",
+          price: data.price_with_currency,
+          number_of_active_users: data.number_of_active_users,
+          interval_value: data.interval_value,
+          package_description: data.package_description,
+          number_of_invoice: data.number_of_invoice,
+          status: data.status?.toLowerCase() || "",
+          trial_days: data.trial_days,
+          currency: data.currency?.toString() || "",
+        });
+        setIsModalOpen(true);
+      })
+      .catch((error) => {
+        console.error("Error fetching package:", error);
+        toast.error("Failed to load package data");
       });
-    });
   };
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -170,9 +173,7 @@ const AllPackages = () => {
   const [currencies, setCurrencies] = useState([]);
   const fetchCurrencies = async () => {
     try {
-      const response = await axios.get(
-        "https://krayon.softwarestesting.co.in/api/symbol"
-      );
+      const response = await axios.get(`${API_BASE_URL}/symbol`);
       if (response.data && Array.isArray(response.data.data)) {
         setCurrencies(response.data.data);
       }

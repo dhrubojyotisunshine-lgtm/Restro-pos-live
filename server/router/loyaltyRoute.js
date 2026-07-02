@@ -9,20 +9,18 @@ router.post("/loyaltypoint",auth,pointcontroller.createLoyaltyPoint);
 
 // Get all loyalty point settings or search by amount/earn_point
 router.get("/loyaltypoints",auth,pointcontroller.getLoyaltyPoints);
-router.delete("/loyaltypoint/:id", pointcontroller.deleteLoyaltyPoint);
+router.delete("/loyaltypoint/:id", auth, pointcontroller.deleteLoyaltyPoint);
 router.put("/loyaltypoint/:id",auth, pointcontroller.updateLoyaltyPoint);
-router.get("/loyaltypoint/:id", pointcontroller.getLoyaltyPointById)
+router.get("/loyaltypoint/:id", auth, pointcontroller.getLoyaltyPointById)
 // for the show customer point list
 router.get("/customerpoints",auth, pointcontroller.getCustomerBillDetails);
 // for merger order
-router.post("/duemerge", pointcontroller.dueMergePayment);
+router.post("/duemerge", auth, pointcontroller.dueMergePayment);
 
 router.get("/duemergeorder",auth,pointcontroller.getOngoingOrderDueMerge);
 
 
-router.get("/invoice/:orderid", pointcontroller.getOrderByIdsDUeMerge);
+router.get("/invoice/:orderid", auth, pointcontroller.getOrderByIdsDUeMerge);
 
-router.post("/cancelAllOrder/:order_id", pointcontroller.cancelAllTypeOrder);
-// for split bill
-// router.post('/postsplit',pointcontroller.postsplitorder)
+router.post("/cancelAllOrder/:order_id", auth, pointcontroller.cancelAllTypeOrder);
 module.exports=router;

@@ -28,11 +28,11 @@ router.post(
   upload.single("ProductImage"),auth,
   addfoodController.createItemFood
 );
-router.post("/bulk-upload-food", upload.single("file"),addfoodController.bulkUploadFoodItems);
-router.delete("/itemfood/:ProductsID", addfoodController.deleteItemFood);
+router.post("/bulk-upload-food", upload.single("file"), auth, addfoodController.bulkUploadFoodItems);
+router.delete("/itemfood/:ProductsID", auth, addfoodController.deleteItemFood);
 
 router.get("/itemfood",auth,addfoodController.getAllItemFoodDetails);
-router.get("/itemfooddetail/:ProductID", addfoodController.getItemFoodDetails);
+router.get("/itemfooddetail/:ProductID", auth, addfoodController.getItemFoodDetails);
 router.put(
   "/itemfood/:ProductID",
   upload.single("ProductImage"),auth,
