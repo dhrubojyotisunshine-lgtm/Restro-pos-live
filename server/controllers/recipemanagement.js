@@ -1080,6 +1080,38 @@ const getProductionDetails = async (req, res) => {
 
 
 
+const syncProduction = async (req, res) => {
+  try {
+    const items = req.body;
+
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ success: false, message: "Invalid data format" });
+    }
+
+    for (const item of items) {
+      await db.query(
+        `INSERT IGNORE INTO production
+          (productionid, itemid, itemvid, itemquantity, savedby, saveddate, productionexpiredate)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.productionid || null,
+          item.itemid || null,
+          item.itemvid || null,
+          item.itemquantity || 0,
+          item.savedby || null,
+          item.saveddate || null,
+          item.productionexpiredate || null,
+        ]
+      );
+    }
+
+    res.json({ success: true, message: "Production synced successfully" });
+  } catch (error) {
+    console.error("PRODUCTION SYNC ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getalldetailsProductiondetails,
   foodWithVariant,
@@ -1094,5 +1126,6 @@ module.exports = {
   getProductionDetails,
   getAllStockIngredientswithone,
   viewProductiondetails,
-  deleteProductionData
+  deleteProductionData,
+  syncProduction
 };

@@ -626,6 +626,35 @@ const orderPlace = async (req, res) => {
 
     const invoiceId = lastOrder[0].maxInvoice ? parseInt(lastOrder[0].maxInvoice) + 1 : 1;
 
+    // 🔥 STEP 1.5: INVOICE LIMIT CHECK
+    const userRow = await runQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [create_by]);
+    const creatorId = (userRow[0]?.is_admin === 1) ? create_by : (userRow[0]?.created_by || create_by);
+
+    const planRows = await runQuery(
+      `SELECT sp.number_of_invoice
+       FROM superadmin_user_plans sup
+       JOIN subscription_plans sp ON sup.plan_id = sp.plan_id
+       WHERE sup.user_id = ?
+       ORDER BY sup.user_plan_id DESC LIMIT 1`,
+      [creatorId]
+    );
+
+    const invoiceLimit = planRows[0]?.number_of_invoice ?? null;
+
+    if (invoiceLimit !== null) {
+      const countRows = await runQuery(
+        "SELECT COUNT(*) AS invoice_count FROM customer_order WHERE created_by = ? AND order_status != 5",
+        [creatorId]
+      );
+      const currentCount = countRows[0]?.invoice_count || 0;
+      if (currentCount >= invoiceLimit) {
+        return res.status(403).json({
+          success: false,
+          message: `Invoice limit reached (${currentCount}/${invoiceLimit}). Please upgrade your plan.`,
+        });
+      }
+    }
+
     // 🔥 STEP 2: TOKEN GENERATION — per company per day
     const lastToken = await runQuery(
       `SELECT tokenno
@@ -2192,7 +2221,7 @@ const cancelOrdersList = async (req, res) => {
         LEFT JOIN bill b ON co.order_id = b.order_id
         LEFT JOIN shipping_method sm ON b.shipping_type = sm.ship_id
         WHERE
-          co.status = 'rejected'
+          co.order_status = 5
           AND co.created_by = ?
       `;
 
@@ -2495,10 +2524,17 @@ const OrderListBySearchFilter = async (req, res) => {
           b.bill_status,
           b.payment_method_id,
           sm.shipping_method AS shipping_method_name,
-          CASE 
+          CASE
             WHEN co.order_status = 4 THEN 1
             ELSE 0
-          END AS can_show_invoice
+          END AS can_show_invoice,
+          (SELECT CASE
+            WHEN COUNT(*) = 0 THEN 'Not Sent'
+            WHEN SUM(k.status = 'rejected') > 0 THEN 'Rejected'
+            WHEN SUM(k.status = 'completed') = COUNT(*) THEN 'All Ready'
+            WHEN SUM(k.status = 'accepted') > 0 THEN 'Cooking'
+            ELSE 'Waiting'
+          END FROM kot_items k WHERE k.order_id = co.order_id) AS kitchen_status
         FROM customer_order co
         LEFT JOIN customer_info c ON co.customer_id = c.customer_id
         LEFT JOIN user w ON co.waiter_id = w.id
@@ -2506,7 +2542,7 @@ const OrderListBySearchFilter = async (req, res) => {
         LEFT JOIN bill b ON co.order_id = b.order_id
         LEFT JOIN shipping_method sm ON b.shipping_type = sm.ship_id
         WHERE co.created_by = ?
-          AND co.order_status IN (1,2,3,4)
+          AND co.order_status IN (1,2,3,4,5)
       `;
 
       const params = [creatorId];
@@ -2636,6 +2672,7 @@ const pendingOrders = async (req, res) => {
         LEFT JOIN customer_type ct ON co.cutomertype = ct.customer_type_id
         WHERE
           co.status = 'pending'
+          AND co.order_status != 5
           AND co.created_by = ?
       `;
 

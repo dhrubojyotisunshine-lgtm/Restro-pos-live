@@ -48,5 +48,6 @@ router.get("/soundsetting", auth, webSettingController.getAllSoundSettings);
 
 router.get("/subscriptions/:id", auth, webSettingController.getSubscriptionsByAdmin);
 router.post("/createsubscription", auth, webSettingController.createSubscriptionByAdmin);
+router.put("/renew-plan/:user_plan_id", auth, webSettingController.renewPlanByAdmin);
 
 module.exports = router;

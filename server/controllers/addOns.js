@@ -321,6 +321,35 @@ const deleteAddOn = (req, res) => {
   });
 };
 
+const syncAddons = async (req, res) => {
+  try {
+    const items = req.body;
+
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ success: false, message: "Invalid data format" });
+    }
+
+    for (const item of items) {
+      await db.query(
+        `INSERT IGNORE INTO add_ons (add_on_id, add_on_name, price, is_active, created_by)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          item.add_on_id || null,
+          item.add_on_name || null,
+          item.price || 0,
+          item.is_active !== undefined ? item.is_active : 1,
+          item.created_by || null,
+        ]
+      );
+    }
+
+    res.json({ success: true, message: "Add-ons synced successfully" });
+  } catch (error) {
+    console.error("ADDON SYNC ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   deleteAddOn,
   updateAddOn,
@@ -328,5 +357,6 @@ module.exports = {
   createAddOn,
   createAddOnWithAssign,
   getAddOns,
-  getAddOnsById
+  getAddOnsById,
+  syncAddons
 };

@@ -700,6 +700,12 @@ const EditOrder = () => {
       })
       .catch((err) => {
         console.log(err);
+        const msg = err.response?.data?.message || err.message || "Error updating order";
+        if (err.response?.status === 403) {
+          toast.warning(msg);
+        } else {
+          toast.error(msg);
+        }
       });
   };
 

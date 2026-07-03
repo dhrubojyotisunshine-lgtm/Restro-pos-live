@@ -18,6 +18,7 @@ const headers = [
   "Transaction ID",
   " Payment Method",
   "Status",
+  "Action",
 ];
 
 const MySubscription = () => {
@@ -31,6 +32,8 @@ const MySubscription = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [renewConfirmOpen, setRenewConfirmOpen] = useState(false);
+  const [selectedRenewPlanId, setSelectedRenewPlanId] = useState(null);
 
   const getallPackages = async () => {
     try {
@@ -71,6 +74,26 @@ const MySubscription = () => {
     setSelectedPlanId(planId);
     setPaymentMethod("");
     setModalOpen(true);
+  };
+
+  const openRenewConfirm = (userPlanId) => {
+    setSelectedRenewPlanId(userPlanId);
+    setRenewConfirmOpen(true);
+  };
+
+  const handleRenewConfirm = async () => {
+    try {
+      await axios.put(`${API_BASE_URL}/renew-plan/${selectedRenewPlanId}`, {}, {
+        headers: { Authorization: token },
+      });
+      toast.success("Renewal requested! Waiting for Super Admin approval.");
+      setRenewConfirmOpen(false);
+      getSubscription();
+    } catch (error) {
+      console.error(error);
+      toast.error(error.response?.data?.message || "Failed to request renewal.");
+      setRenewConfirmOpen(false);
+    }
   };
 
   const handleModalBuy = () => {
@@ -150,8 +173,10 @@ const MySubscription = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100 text-gray-700 text-center">
-                        {subscription.length > 0 ? (
-                          subscription.map((row, index) => {
+                        {(() => {
+                          const latestPending = subscription.find(s => s.package_status === 'pending');
+                          return subscription.length > 0 ? (
+                            subscription.map((row, index) => {
                             let badgeColor = "";
                             switch (row.plan_status.toLowerCase()) {
                               case "active":
@@ -163,12 +188,16 @@ const MySubscription = () => {
                               case "pending":
                                 badgeColor = "bg-yellow-400";
                                 break;
+                              case "renew requested":
+                                badgeColor = "bg-blue-500";
+                                break;
                               case "superseded":
                                 badgeColor = "bg-gray-500";
                                 break;
                               default:
                                 badgeColor = "bg-gray-400";
                             }
+                            const isLatestPending = row.package_status === 'pending' && latestPending?.user_plan_id === row.user_plan_id;
 
                             const startDate =
                               row.start_date && row.start_date !== "0000-00-00"
@@ -221,19 +250,30 @@ const MySubscription = () => {
                                     {row.plan_status}
                                   </span>
                                 </td>
+                                <td className="py-3 px-6">
+                                  {isLatestPending && (
+                                    <button
+                                      onClick={() => openRenewConfirm(row.user_plan_id)}
+                                      className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 rounded text-sm font-semibold"
+                                    >
+                                      Renew Plan
+                                    </button>
+                                  )}
+                                </td>
                               </tr>
                             );
                           })
-                        ) : (
+                          ) : (
                           <tr>
                             <td
-                              colSpan={8}
+                              colSpan={9}
                               className="py-6 text-gray-500 text-center"
                             >
                               No subscriptions found.
                             </td>
                           </tr>
-                        )}
+                        );
+                        })()}
                       </tbody>
                     </table>
                   </div>
@@ -385,6 +425,36 @@ const MySubscription = () => {
                     >
                       Buy Now
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Renew Plan Confirmation Modal */}
+              {renewConfirmOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+                  <div className="bg-white rounded-2xl p-6 w-96 relative shadow-2xl border border-gray-200">
+                    <IoMdClose
+                      onClick={() => setRenewConfirmOpen(false)}
+                      className="absolute top-4 right-4 cursor-pointer text-2xl text-gray-600 hover:text-red-500 transition-colors"
+                    />
+                    <h2 className="text-xl font-bold mb-4 text-center text-gray-800">Confirm Plan Renewal</h2>
+                    <p className="text-gray-600 text-center mb-6">
+                      Your current active plan will be <strong>superseded</strong> once the Super Admin approves this renewal. Do you want to proceed?
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setRenewConfirmOpen(false)}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleRenewConfirm}
+                        className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-lg"
+                      >
+                        Yes, Request Renewal
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

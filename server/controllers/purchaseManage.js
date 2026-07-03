@@ -2001,6 +2001,42 @@ const getReturnItemInfoByID = (req, res) => {
   });
 };
 
+const syncPurchaseItems = async (req, res) => {
+  try {
+    const items = req.body;
+
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ success: false, message: "Invalid data format" });
+    }
+
+    for (const item of items) {
+      await db.query(
+        `INSERT IGNORE INTO purchaseitem
+          (purID, invoiceid, suplierID, paymenttype, bankid, total_price, paid_amount, details, purchasedate, purchaseexpiredate, savedby)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.purID || null,
+          item.invoiceid || null,
+          item.suplierID || null,
+          item.paymenttype || null,
+          item.bankid || null,
+          item.total_price || 0,
+          item.paid_amount || 0,
+          item.details || null,
+          item.purchasedate || null,
+          item.purchaseexpiredate || null,
+          item.savedby || null,
+        ]
+      );
+    }
+
+    res.json({ success: true, message: "Purchase items synced successfully" });
+  } catch (error) {
+    console.error("PURCHASE SYNC ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
   module.exports={
     getPurchaseItemDetails
     ,getReturnpurchase,
@@ -2020,6 +2056,7 @@ const getReturnItemInfoByID = (req, res) => {
     invoiceBySupplier,
     purReturnInsert,
     getPurchaseTransactions,
-    getReturnItemInfoByID
-  
+    getReturnItemInfoByID,
+    syncPurchaseItems
+
   }

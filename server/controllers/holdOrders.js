@@ -664,6 +664,28 @@ const draftOrderPlace = (req, res) => {
         return res.status(403).json({ message: "You are not authorized to update this order." });
       }
 
+      // Invoice limit check
+      const planRows = await dbQuery(
+        `SELECT sp.number_of_invoice FROM superadmin_user_plans sup
+         JOIN subscription_plans sp ON sup.plan_id = sp.plan_id
+         WHERE sup.user_id = ? ORDER BY sup.user_plan_id DESC LIMIT 1`,
+        [creatorId]
+      );
+      const invoiceLimit = planRows[0]?.number_of_invoice ?? null;
+      if (invoiceLimit !== null) {
+        const countRows = await dbQuery(
+          "SELECT COUNT(*) AS invoice_count FROM customer_order WHERE created_by = ? AND order_status NOT IN (5, 6)",
+          [creatorId]
+        );
+        const currentCount = countRows[0]?.invoice_count || 0;
+        if (currentCount >= invoiceLimit) {
+          return res.status(403).json({
+            success: false,
+            message: `Invoice limit reached (${currentCount}/${invoiceLimit}). Please upgrade your plan.`,
+          });
+        }
+      }
+
       // Update customer_order table
       const updateOrderQuery = `
         UPDATE customer_order
@@ -707,7 +729,26 @@ const draftOrderPlace = (req, res) => {
         ];
       });
       await dbQuery(orderDetailsQuery, [orderDetailsData]);
- 
+
+      // Create KOT items so the order appears in the kitchen dashboard
+      await dbQuery("DELETE FROM kot_items WHERE order_id = ?", [order_id]);
+      for (const detail of order_details) {
+        const foods = await dbQuery(
+          "SELECT ProductName, kitchenid FROM item_foods WHERE ProductsID = ?",
+          [detail.ProductsID]
+        );
+        if (!foods.length || !foods[0].kitchenid) continue;
+        const kitchenId = foods[0].kitchenid;
+        let kotName = foods[0].ProductName;
+        if (detail.addons?.length) {
+          kotName += ` (Addons: ${detail.addons.map(a => a.add_on_name).join(", ")})`;
+        }
+        await dbQuery(
+          "INSERT INTO kot_items (order_id, kitchen_id, item_name, qty, printed) VALUES (?, ?, ?, ?, 0)",
+          [order_id, kitchenId, kotName, detail.quantity]
+        );
+      }
+
       // Update table status if necessary
       const updateTableStatusQuery =
         "UPDATE rest_table SET status = 1 WHERE tableid = ?";

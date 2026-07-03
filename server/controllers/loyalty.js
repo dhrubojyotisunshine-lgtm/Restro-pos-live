@@ -1061,8 +1061,8 @@ const cancelAllTypeOrder = (req, res) => {
 
       // Step 3: Update order status and cancellation reason
       const updateOrderQuery = `
-          UPDATE customer_order 
-          SET order_status = 5, anyreason = ?
+          UPDATE customer_order
+          SET order_status = 5, anyreason = ?, status = 'rejected'
           WHERE order_id IN (?)`;
 
       db.pool.query(

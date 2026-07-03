@@ -27,6 +27,9 @@ router.delete('/suppliers/:id', auth, purchaseController.deleteSupplier)
 router.get('/suppliers/:id', auth, purchaseController.getSupplierById)
 router.put('/suppliers/:id', auth, purchaseController.updateSupplier);
 
+// Electron app sync
+router.post('/sync/purchaseitem', purchaseController.syncPurchaseItems);
+
 // get out of stock
 router.get('/stock', auth,purchaseController.stockOutIngredients);
 // get getIngredientby stock quantity

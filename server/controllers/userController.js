@@ -850,6 +850,95 @@ const resetPasswordController = async (req, res) => {
   }
 };
 
+const activateExe = async (req, res) => {
+  const { email, subscription_key } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ success: false, message: "Email is required" });
+  }
+
+  try {
+    const users = await db.query("SELECT * FROM user WHERE email = ? LIMIT 1", [email]);
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const user = users[0];
+
+    const subQuery = `
+      SELECT sup.*, sp.package_name, sp.price_with_currency, sp.number_of_active_users,
+             sp.interval_value, sp.currency, sp.price_interval, sp.trial_days,
+             sp.number_of_invoice, sp.status AS plan_status, sp.package_description
+      FROM superadmin_user_plans sup
+      LEFT JOIN subscription_plans sp ON sup.plan_id = sp.plan_id
+      WHERE sup.user_id = ?
+      ORDER BY sup.user_plan_id DESC
+      LIMIT 1
+    `;
+    const subs = await db.query(subQuery, [user.id]);
+
+    if (!subs || subs.length === 0) {
+      return res.status(403).json({ success: false, message: "No valid subscription found" });
+    }
+
+    const sub = subs[0];
+
+    // If DB has no key yet, store the provided key (first activation or new plan)
+    if (!sub.subscription_key && subscription_key) {
+      await db.query(
+        "UPDATE superadmin_user_plans SET subscription_key = ? WHERE user_plan_id = ?",
+        [subscription_key, sub.user_plan_id]
+      );
+    }
+
+    const restaurants = await db.query(
+      "SELECT * FROM restaurant_settings WHERE user_id = ? LIMIT 1",
+      [user.id]
+    );
+
+    const restaurant = restaurants?.[0] || null;
+
+    const plan = {
+      plan_id: sub.plan_id,
+      package_name: sub.package_name,
+      currency: sub.currency,
+      price_interval: sub.price_interval,
+      price_with_currency: sub.price_with_currency,
+      number_of_active_users: sub.number_of_active_users,
+      interval_value: sub.interval_value,
+      package_description: sub.package_description,
+      number_of_invoice: sub.number_of_invoice,
+      status: sub.plan_status,
+      trial_days: sub.trial_days,
+    };
+
+    const subscription = {
+      user_plan_id: sub.user_plan_id,
+      user_id: sub.user_id,
+      plan_id: sub.plan_id,
+      payment_type: sub.payment_type,
+      payment_method: sub.payment_method,
+      start_date: sub.start_date,
+      end_date: sub.end_date,
+      trial_date: sub.trial_date,
+      package_status: sub.package_status,
+      created_by: sub.created_by,
+      created_at: sub.created_at,
+      subscription_key: sub.subscription_key || subscription_key || null,
+    };
+
+    return res.json({
+      success: true,
+      message: "EXE activated successfully",
+      data: { user, restaurant, subscription, plan },
+    });
+  } catch (error) {
+    console.error("ACTIVATE EXE ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
   module.exports={
     addUser,
     getUsers,
@@ -862,5 +951,6 @@ const resetPasswordController = async (req, res) => {
     checkIncheckOut,
     ForgetPasswordController,
     resetPasswordController,
-    addBulkUsers
+    addBulkUsers,
+    activateExe
   }

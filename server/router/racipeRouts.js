@@ -23,4 +23,8 @@ router.put('/productiondetail/:foodnameid/:pvarientnameid',auth,recipecontroller
 
 // to show data in below
 router.get('/productiondetails',auth,recipecontroller.getProductionDetails)
+
+// Electron app sync
+router.post('/sync/production', recipecontroller.syncProduction);
+
 module.exports = router;

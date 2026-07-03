@@ -295,6 +295,7 @@ const getSubscriptionsByAdmin = async (req, res) => {
     CASE
       WHEN sup.package_status = 'approved' AND sup.end_date >= CURDATE() THEN 'Active'
       WHEN sup.package_status = 'approved' AND sup.end_date < CURDATE() THEN 'Expired'
+      WHEN sup.package_status = 'renew_requested' THEN 'Renew Requested'
       WHEN sup.package_status = 'pending' THEN 'Pending'
       WHEN sup.package_status = 'superseded' THEN 'Superseded'
       ELSE 'Unknown'
@@ -351,6 +352,40 @@ const createSubscriptionByAdmin = async (req, res) => {
   }
 };
 
+const renewPlanByAdmin = async (req, res) => {
+  const { user_plan_id } = req.params;
+  const userId = req.id;
+
+  try {
+    // Verify this plan belongs to the requesting user
+    const [rows] = await db.pool.promise().query(
+      `SELECT user_plan_id, user_id, package_status FROM superadmin_user_plans WHERE user_plan_id = ?`,
+      [user_plan_id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: "Plan not found" });
+    }
+
+    const plan = rows[0];
+
+    if (plan.package_status !== 'pending') {
+      return res.status(400).json({ success: false, message: "Only pending plans can be requested for renewal" });
+    }
+
+    // Change status to renew_requested
+    await db.pool.promise().query(
+      `UPDATE superadmin_user_plans SET package_status = 'renew_requested' WHERE user_plan_id = ?`,
+      [user_plan_id]
+    );
+
+    return res.status(200).json({ success: true, message: "Renewal requested. Waiting for Super Admin approval." });
+  } catch (error) {
+    console.error("renewPlanByAdmin error:", error);
+    return res.status(500).json({ success: false, message: "An error occurred" });
+  }
+};
+
   module.exports={
     getAllSettings,
     createSetting,
@@ -359,5 +394,6 @@ const createSubscriptionByAdmin = async (req, res) => {
     createOrUpdateSoundSetting,
     getAllSoundSettings,
     getSubscriptionsByAdmin,
-    createSubscriptionByAdmin
+    createSubscriptionByAdmin,
+    renewPlanByAdmin
   }

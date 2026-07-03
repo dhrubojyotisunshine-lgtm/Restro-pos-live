@@ -306,7 +306,7 @@ exports.updateSubscriptionStatus = async (req, res) => {
 
   try {
     const [sub] = await db.pool.promise().query(
-      `SELECT sup.*, sp.interval_value, sp.price_interval
+      `SELECT sup.*, sp.interval_value, sp.price_interval, sp.trial_days
        FROM superadmin_user_plans sup
        JOIN subscription_plans sp ON sup.plan_id = sp.plan_id
        WHERE sup.user_plan_id = ?`,
@@ -315,24 +315,30 @@ exports.updateSubscriptionStatus = async (req, res) => {
 
     if (sub.length === 0) return res.status(404).json({ message: "Subscription not found" });
 
+    const plan = sub[0];
+    const isRenewApproval = plan.package_status === 'renew_requested';
     let startDate = null;
     let endDate = null;
 
     if (status.toLowerCase() === "approved") {
-      const plan = sub[0];
-
-      const [lastApproved] = await db.pool.promise().query(
-        `SELECT * FROM superadmin_user_plans 
-         WHERE user_id = ? AND package_status = 'approved' 
-         ORDER BY end_date DESC LIMIT 1`,
-        [plan.user_id]
-      );
-
-      if (lastApproved.length > 0 && lastApproved[0].end_date) {
-        startDate = new Date(lastApproved[0].end_date);
-        startDate.setDate(startDate.getDate() + 1);
-      } else {
+      if (isRenewApproval) {
+        // Renew flow: start_date = today, supersede all current approved plans
         startDate = new Date();
+      } else {
+        // Normal approval: start after last approved plan or today
+        const [lastApproved] = await db.pool.promise().query(
+          `SELECT * FROM superadmin_user_plans
+           WHERE user_id = ? AND package_status = 'approved'
+           ORDER BY end_date DESC LIMIT 1`,
+          [plan.user_id]
+        );
+
+        if (lastApproved.length > 0 && lastApproved[0].end_date) {
+          startDate = new Date(lastApproved[0].end_date);
+          startDate.setDate(startDate.getDate() + 1);
+        } else {
+          startDate = new Date();
+        }
       }
 
       endDate = new Date(startDate);
@@ -349,6 +355,19 @@ exports.updateSubscriptionStatus = async (req, res) => {
         default:
           endDate.setMonth(endDate.getMonth() + plan.interval_value);
       }
+
+      if (plan.trial_days) {
+        endDate.setDate(endDate.getDate() + plan.trial_days);
+      }
+    }
+
+    // If approving a renew_requested plan, supersede all current approved plans first
+    if (status.toLowerCase() === "approved" && isRenewApproval) {
+      await db.pool.promise().query(
+        `UPDATE superadmin_user_plans SET package_status = 'superseded'
+         WHERE user_id = ? AND package_status = 'approved'`,
+        [plan.user_id]
+      );
     }
 
     await db.pool.promise().query(

@@ -36,4 +36,8 @@ router.put(
   dataController.updateCategory
 );
 router.get("/data/:id", auth, dataController.getCategoryById);
+
+// Electron app sync (no auth — uses x-sync-key header)
+router.post("/categories/sync", dataController.syncCategory);
+
 module.exports = router;

@@ -13,4 +13,7 @@ router.post("/createAddOnWithAssign", auth, addOnController.createAddOnWithAssig
 router.put("/addons/:add_on_Id", auth, addOnController.updateAddOn);
 router.delete("/addons/:id", auth, addOnController.deleteAddOn);
 
+// Electron app sync (no auth)
+router.post("/sync/addons", addOnController.syncAddons);
+
 module.exports = router;

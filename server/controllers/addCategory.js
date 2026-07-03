@@ -610,6 +610,52 @@ const getCategoryById = (req, res) => {
     });
   });
 };
+const syncCategory = async (req, res) => {
+  try {
+    const syncKey = req.headers["x-sync-key"];
+    if (syncKey !== "my-secret-key") {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const cat = req.body;
+    if (!cat || !cat.Name) {
+      return res.status(400).json({ success: false, message: "Invalid category data" });
+    }
+
+    await db.query(
+      `INSERT INTO item_category
+        (CategoryID, Name, CategoryImage, Position, CategoryIsActive,
+         offerstartdate, offerendate, isoffer, parentid, UserIDInserted,
+         DateInserted, DateUpdated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         Name = VALUES(Name),
+         CategoryImage = VALUES(CategoryImage),
+         CategoryIsActive = VALUES(CategoryIsActive),
+         DateUpdated = VALUES(DateUpdated)`,
+      [
+        cat.CategoryID || null,
+        cat.Name || null,
+        cat.CategoryImage || null,
+        cat.Position || 0,
+        cat.CategoryIsActive !== undefined ? cat.CategoryIsActive : 1,
+        cat.offerstartdate || "0000-00-00",
+        cat.offerendate || "0000-00-00",
+        cat.isoffer || 0,
+        cat.parentid || 0,
+        cat.UserIDInserted || null,
+        cat.DateInserted || null,
+        cat.DateUpdated || null,
+      ]
+    );
+
+    res.json({ success: true, message: "Category synced" });
+  } catch (error) {
+    console.error("CATEGORY SYNC ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getCategory,
   addCategory,
@@ -617,4 +663,5 @@ module.exports = {
   updateCategory,
   addCategoriesBulk,
   getCategoryById,
+  syncCategory,
 };
