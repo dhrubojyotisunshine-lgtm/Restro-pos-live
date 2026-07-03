@@ -67,10 +67,30 @@ const OrdersList = () => {
     "Waiter",
     "Table No.",
     "Paynment Status",
+    "Order Status",
+    "Kitchen Status",
     " Order Date",
     "Amount",
     "Action",
   ];
+
+  const getOrderStatusLabel = (row) => {
+    if (Number(row.order_status) === 5)
+      return { label: "Cancelled", color: "bg-red-100 text-red-700" };
+    if (Number(row.bill_status) === 1)
+      return { label: "Completed", color: "bg-green-100 text-green-700" };
+    return { label: "Pending", color: "bg-yellow-100 text-yellow-700" };
+  };
+
+  const getKitchenStatusLabel = (status) => {
+    switch (status) {
+      case "Cooking":   return { label: "Cooking",   color: "bg-blue-100 text-blue-700" };
+      case "All Ready": return { label: "All Ready", color: "bg-green-100 text-green-700" };
+      case "Rejected":  return { label: "Rejected",  color: "bg-red-100 text-red-700" };
+      case "Waiting":   return { label: "Waiting",   color: "bg-orange-100 text-orange-700" };
+      default:          return { label: "Not Sent",  color: "bg-gray-100 text-gray-500" };
+    }
+  };
   //delete id
 
   const closeModaldelete = () => setIsDeletOpen(false);
@@ -681,6 +701,26 @@ const OrdersList = () => {
                               </td>
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 {row.bill_status == 0 ? "Due" : "Paid"}
+                              </td>
+                              <td className="py-2 px-4 border border-[#4CBBA1]">
+                                {(() => {
+                                  const { label, color } = getOrderStatusLabel(row);
+                                  return (
+                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${color}`}>
+                                      {label}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                              <td className="py-2 px-4 border border-[#4CBBA1]">
+                                {(() => {
+                                  const { label, color } = getKitchenStatusLabel(row.kitchen_status);
+                                  return (
+                                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${color}`}>
+                                      {label}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 {(() => {

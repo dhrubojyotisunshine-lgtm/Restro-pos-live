@@ -657,6 +657,7 @@ const EditOrder = () => {
         cartItem.variantid !== val.variantid
     );
     setCart(newCart);
+    setOrderDetail(newCart);
   };
 
   const handleQuantityChange = (event) => {

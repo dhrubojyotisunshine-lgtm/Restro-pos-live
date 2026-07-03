@@ -461,11 +461,12 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
         }
       })
       .catch((error) => {
-        const errorMessage =
-          error.response?.data?.message ||
-          error.message ||
-          "Unknown error occurred";
-        toast.error("Error placing order: " + errorMessage);
+        const msg = error.response?.data?.message || error.message || "Unknown error occurred";
+        if (error.response?.status === 403) {
+          toast.warning(msg);
+        } else {
+          toast.error(msg);
+        }
       });
   };
 
@@ -615,6 +616,7 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
       });
 
       setCart(newCart);
+      setOrderDetail(newCart);
     } else {
       let addonTotal = addOneData.checkedaddons.reduce((acc, addon) => {
         return acc + addon.add_on_price * addon.add_on_quantity;
@@ -658,6 +660,7 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
       }
     });
     setCart(newCart);
+    setOrderDetail(newCart);
   };
 
   const decreaseQuantity = (productId, variantid) => {
@@ -685,6 +688,7 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
       }
     });
     setCart(newCart);
+    setOrderDetail(newCart);
   };
 
   useEffect(() => {
@@ -740,6 +744,7 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
         cartItem.variantid !== val.variantid,
     );
     setCart(newCart);
+    setOrderDetail(newCart);
   };
   const show = (index) => {
     setOpenSubmenuIndex(index === openSubmenuIndex ? null : index);
