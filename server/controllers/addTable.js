@@ -227,24 +227,24 @@ const syncTables = async (req, res) => {
         INSERT INTO rest_table
         (
           uuid,
-          table_name,
-          floor_id,
-          capacity,
+          tablename,
+          floor,
+          person_capicity,
           status
         )
         VALUES (?, ?, ?, ?, ?)
 
         ON DUPLICATE KEY UPDATE
-          table_name = VALUES(table_name),
-          floor_id = VALUES(floor_id),
-          capacity = VALUES(capacity),
+          tablename = VALUES(tablename),
+          floor = VALUES(floor),
+          person_capicity = VALUES(person_capicity),
           status = VALUES(status)
       `,
         [
           table.uuid,
-          table.table_name,
-          table.floor_id,
-          table.capacity,
+          table.tablename,
+          table.floor,
+          table.person_capicity,
           table.status,
         ],
       );

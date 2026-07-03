@@ -197,16 +197,15 @@ const syncFloors = async (req, res) => {
         INSERT INTO tbl_tablefloor
         (
           uuid,
-          floor_name,
-          status
+          floorName,
+          created_by
         )
         VALUES (?, ?, ?)
 
         ON DUPLICATE KEY UPDATE
-          floor_name = VALUES(floor_name),
-          status = VALUES(status)
+          floorName = VALUES(floorName)
       `,
-        [floor.uuid, floor.floor_name, floor.status],
+        [floor.uuid, floor.floorName, floor.created_by],
       );
     }
 
