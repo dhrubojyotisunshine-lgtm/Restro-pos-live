@@ -315,6 +315,7 @@ const draftOrderPlace = (req, res) => {
     VAT,
     discount,
     table_id,
+    persons = 1,
   } = req.body;
   const create_by = req.id;
  
@@ -415,8 +416,16 @@ const draftOrderPlace = (req, res) => {
             }
  
             // Update the table status to 1 (booked)
-            const updateTableStatusQuery = "UPDATE rest_table SET status = 1 WHERE tableid = ?";
-            db.pool.query(updateTableStatusQuery, [tableId], (err, result) => {
+            const updateTableStatusQuery = `
+              UPDATE rest_table
+              SET occupied_seats = CASE WHEN occupied_seats + ? >= person_capicity THEN person_capicity ELSE occupied_seats + ? END,
+                  status = CASE
+                    WHEN (occupied_seats + ?) >= person_capicity THEN 'booked'
+                    WHEN (occupied_seats + ?) > 0 THEN 'partial'
+                    ELSE 'free'
+                  END
+              WHERE tableid = ?`;
+            db.pool.query(updateTableStatusQuery, [persons, persons, persons, persons, tableId], (err, result) => {
               if (err) {
                 console.error("Error updating table status:", err);
                 return res.status(500).json({ message: "Internal server error" });
@@ -672,7 +681,7 @@ const draftOrderPlace = (req, res) => {
         [creatorId]
       );
       const invoiceLimit = planRows[0]?.number_of_invoice ?? null;
-      if (invoiceLimit !== null) {
+      if (invoiceLimit !== null && invoiceLimit > 0) {
         const countRows = await dbQuery(
           "SELECT COUNT(*) AS invoice_count FROM customer_order WHERE created_by = ? AND order_status NOT IN (5, 6)",
           [creatorId]

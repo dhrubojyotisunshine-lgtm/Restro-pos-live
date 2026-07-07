@@ -641,7 +641,7 @@ const orderPlace = async (req, res) => {
 
     const invoiceLimit = planRows[0]?.number_of_invoice ?? null;
 
-    if (invoiceLimit !== null) {
+    if (invoiceLimit !== null && invoiceLimit > 0) {
       const countRows = await runQuery(
         "SELECT COUNT(*) AS invoice_count FROM customer_order WHERE created_by = ? AND order_status != 5",
         [creatorId]

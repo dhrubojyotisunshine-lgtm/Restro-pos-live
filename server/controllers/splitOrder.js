@@ -557,7 +557,7 @@ const paymentSplitOrder = async (req, res) => {
         [
           1,
           totalDiscount,
-          billAmount,
+          billAmount - totalDiscount,
           payment_method_id[0],
           new Date(),
           order_id,
@@ -773,7 +773,7 @@ console.log("Payload:", req.body);
       if (orderResult && orderResult.table_no !== 0) {
         await new Promise((resolve, reject) => {
           db.run(
-            "UPDATE rest_table SET status = 0 WHERE tableid = ?",
+            "UPDATE rest_table SET status = 0, occupied_seats = 0 WHERE tableid = ?",
             [orderResult.table_no],
             (err) => {
               if (err) return reject(err);
@@ -927,7 +927,7 @@ console.log("Payload:", req.body);
       console.log("oprder split",orderResult[0].splitpay_status)
                 if (orderResult.length && orderResult[0].table_no !== 0) {
                   const table_no = orderResult[0].table_no;
-                  await db.pool.promise().query('UPDATE rest_table SET status = 0 WHERE tableid = ?', [table_no]);
+                  await db.pool.promise().query('UPDATE rest_table SET status = 0, occupied_seats = 0 WHERE tableid = ?', [table_no]);
                 }
 
                 await db.pool.promise().query('UPDATE customer_order SET order_status = 4 WHERE order_id = ?', [order_id]);

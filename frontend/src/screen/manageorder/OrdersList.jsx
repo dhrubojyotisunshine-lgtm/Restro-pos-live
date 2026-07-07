@@ -390,7 +390,7 @@ const OrdersList = () => {
         Table_No: item.table_no,
         Payment_Status: item.bill_status == 0 ? "Due" : "Paid",
         Order_Date: new Date(item.order_date).toLocaleDateString(), // Fix date formatting
-        Amount: item.totalamount,
+        Amount: item.bill_amount,
       }));
 
       const csvString = Papa.unparse(csvData); // Convert data to CSV format
@@ -436,7 +436,7 @@ const OrdersList = () => {
         table_number: item.table_no,
         payment_status: item.bill_status == 0 ? "Due" : "Paid",
         order_date: new Date(item.order_date).toLocaleDateString(), // Fix date formatting
-        amount: item.totalamount,
+        amount: item.bill_amount,
       });
     });
 
@@ -467,7 +467,7 @@ const OrdersList = () => {
       item.table_no,
       item.bill_status == 0 ? "Due" : "Paid",
       new Date(item.order_date).toLocaleDateString(),
-      item.totalamount,
+      item.bill_amount,
     ]);
 
     // Add a title

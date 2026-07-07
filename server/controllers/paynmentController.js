@@ -155,7 +155,7 @@ const makePayment = (req, res) => {
       // Update rest_table if table_no is not 0
       const updateTable = table_no !== 0 
         ? new Promise((resolve, reject) => {
-            const updateTableQuery = `UPDATE rest_table SET status = 0 WHERE tableid = ?`; // status=1 means booked, status=0 means free
+            const updateTableQuery = `UPDATE rest_table SET status = 0, occupied_seats = 0 WHERE tableid = ?`; // status=1 means booked, status=0 means free
             db.pool.query(updateTableQuery, [table_no], (err, updateTableResult) => {
               if (err) {
                 console.error("Error updating rest_table:", err);

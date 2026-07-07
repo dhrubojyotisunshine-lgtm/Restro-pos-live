@@ -339,6 +339,7 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
       customer_type: selectCustomerType,
       waiter_id: selectCustomerType === 4 ? null : waiter || null, // Skip waiter for type 4
       table_id: selectTable || null,
+      persons: Number(persons),
       order_details: orderDetail,
       grand_total: total,
       service_charge: serviceChargeAmount,

@@ -419,7 +419,8 @@ const OnGoingOrder = () => {
             }, 0)
           : 0; // Default to 0 if no add-ons
 
-      return acc + qty * price + vat + addonsPrice; // Accumulate the total
+      const vatAmount = (qty * price * vat) / 100;
+      return acc + qty * price + vatAmount + addonsPrice; // Accumulate the total
     }, 0)
     .toFixed(2); // Format the total to 2 decimal places
   // for remaining total
@@ -440,7 +441,8 @@ const OnGoingOrder = () => {
             }, 0)
           : 0; // Default to 0 if no add-ons
 
-      return acc + qty * price + vat + addonsPrice; // Accumulate the total
+      const vatAmount = (qty * price * vat) / 100;
+      return acc + qty * price + vatAmount + addonsPrice; // Accumulate the total
     }, 0)
     .toFixed(2); // Format the total to 2 decimal places
 
