@@ -510,7 +510,7 @@ const handleDeleteClick = (foodid, pvarientid) => {
 
 const deleteCategory = ({ foodid, pvarientid }) => {
   axios
-    .delete(`${API_BASE_URL}/productiondetail/${foodid}/${pvarientid}`)
+    .delete(`${API_BASE_URL}/productiondetail/${foodid}/${pvarientid}`, { headers: { Authorization: token } })
     .then((res) => {
       console.log(res.data);
       fetchData(); // Refresh the data list.

@@ -7,8 +7,9 @@ const Login = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const VITE_IMG_URL = import.meta.env.VITE_IMG_URL;
   const APP_URL = import.meta.env.VITE_APP_URL;
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => localStorage.getItem("remembered_email") || "");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem("remembered_email"));
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -42,6 +43,12 @@ const Login = () => {
       localStorage.setItem("userId", userId);
       localStorage.setItem("isAdmin", isAdmin);
       localStorage.setItem("superAdmin", superAdmin);
+
+      if (rememberMe) {
+        localStorage.setItem("remembered_email", email);
+      } else {
+        localStorage.removeItem("remembered_email");
+      }
       if (websitelink) {
         localStorage.setItem("websitelink", websitelink); // ✅ Save website link
       }
@@ -131,7 +138,12 @@ const Login = () => {
             </button>
           </div>
           <div className="flex items-center mt-4">
-            <input type="checkbox" className="mr-2 custom-checkbox" />{" "}
+            <input
+              type="checkbox"
+              className="mr-2 custom-checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />{" "}
             <span>Remember me</span>
           </div>
           <button

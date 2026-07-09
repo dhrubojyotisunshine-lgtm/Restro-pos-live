@@ -46,7 +46,7 @@ router.get("/csetting/:id", auth, webSettingController.getSettingById);
 router.post("/createsound", auth, upload.single("notifysound"), webSettingController.createOrUpdateSoundSetting);
 router.get("/soundsetting", auth, webSettingController.getAllSoundSettings);
 
-router.get("/subscriptions/:id", auth, webSettingController.getSubscriptionsByAdmin);
+router.get("/subscriptions/:id", webSettingController.getSubscriptionsByAdmin);
 router.post("/createsubscription", auth, webSettingController.createSubscriptionByAdmin);
 router.put("/renew-plan/:user_plan_id", auth, webSettingController.renewPlanByAdmin);
 

@@ -292,6 +292,7 @@ const getSubscriptionsByAdmin = async (req, res) => {
     sup.trial_date,
     sup.user_plan_id,
     sup.user_id,
+    sup.plan_id,
     CASE
       WHEN sup.package_status = 'approved' AND sup.end_date >= CURDATE() THEN 'Active'
       WHEN sup.package_status = 'approved' AND sup.end_date < CURDATE() THEN 'Expired'

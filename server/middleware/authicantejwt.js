@@ -193,21 +193,24 @@ const verifyToken = async (req, res, next) => {
     const plans = await dbQuery(planQuery, [req.id]);
     const plan = plans[0];
 
+    // ✅ Buying/renewing a plan must always be allowed regardless of subscription state
+    const isExempt = req.path.includes('/renew-plan/') || req.path.includes('/createsubscription');
+
     if (!plan) {
+      if (isExempt) return next();
       return res.status(403).json({ message: "No subscription found. Please purchase a plan." });
     }
 
     const now = new Date();
     const endDate = new Date(plan.end_date);
 
-    // ❌ Expired plan → block all API access
-    if (endDate < now) {
+    if (!isExempt && endDate < now) {
       return res.status(403).json({
         message: "Your subscription has expired. Please renew your plan to continue.",
       });
     }
 
-    next(); // ✅ Only active plan will pass
+    next();
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).send({ message: 'Token expired' });
