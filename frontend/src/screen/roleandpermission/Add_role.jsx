@@ -108,6 +108,7 @@ const Add_role = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const [isOpen, setOpen] = useState(true);
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const [roleName, setRoleName] = useState("");
   const [roleDescription, setRoleDescription] = useState("");
   const [roleNameError, setRoleNameError] = useState("");
@@ -326,14 +327,16 @@ const [roleDescriptionError, setRoleDescriptionError] = useState("");
 
                     <div className="text-center mt-4 flex justify-between pb-5">
                       <span></span>
+                      {canDo('add_role', 'can_create') && (
                       <HasPermission module="Add Role" action="create">
-                      <button
-                        type="submit"
-                        className=" bg-[#0f044a] text-[#fff] border-[2px] border-zinc-300 rounded-xl cursor-pointer  px-7 py-3"
-                      >
-                        Submit
-                      </button>
+                        <button
+                          type="submit"
+                          className=" bg-[#0f044a] text-[#fff] border-[2px] border-zinc-300 rounded-xl cursor-pointer  px-7 py-3"
+                        >
+                          Submit
+                        </button>
                       </HasPermission>
+                      )}
                      
                     </div>
                   </form>

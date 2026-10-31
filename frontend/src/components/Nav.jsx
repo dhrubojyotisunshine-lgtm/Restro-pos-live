@@ -27,7 +27,35 @@ const Nav = () => {
   const [data2, setData2] = useState(null);
   const { isLogin, logoutUser } = useContext(AuthContext);
   const token = localStorage.getItem("token");
-  
+  const [enabledModuleKeys, setEnabledModuleKeys] = useState(null);
+  const [subFeaturePerms, setSubFeaturePerms] = useState(null);
+
+  useEffect(() => {
+    if (token) {
+      axios
+        .get(`${API_BASE_URL}/module-allocation/my-modules`, {
+          headers: { Authorization: token },
+        })
+        .then((res) => {
+          if (res.data?.success && Array.isArray(res.data.data)) {
+            setEnabledModuleKeys(new Set(res.data.data));
+          }
+        })
+        .catch(() => setEnabledModuleKeys(null));
+
+      axios
+        .get(`${API_BASE_URL}/module-allocation/my-sub-features`, {
+          headers: { Authorization: token },
+        })
+        .then((res) => {
+          if (res.data?.success) {
+            setSubFeaturePerms(res.data.data);
+          }
+        })
+        .catch(() => setSubFeaturePerms(null));
+    }
+  }, [token]);
+
   useEffect(() => {
     Menus.forEach((menu, index) => {
       if (menu.submanu) {
@@ -67,172 +95,168 @@ const Nav = () => {
     },
     {
       title: "Manage Order",
+      module_key: "manage_order",
       submanu: true,
       icon: <FaFirstOrder />,
       submanuItems: [
-        { title: "POS Invoice", link: "/order-list" },
-        { title: "Order List", link: "/orders-list" },
-        { title: "Pending Order", link: "/pending-order" },
-        { title: "Complete Order", link: "/complete-order" },
-        { title: "Cancel Order", link: "/cancel-order" },
-        { title: "Kitchen Dashboard", link: "/kitchen-dashboard" },
-        // { title: "Counter Dashboard", link: "/working" },
-        // { title: "Counter list", link: "/counter-list" },
-        // { title: "POS Setting", link: "/pos-setting" },
+        { title: "POS Invoice",        link: "/order-list",         sub_feature_key: "pos_invoice" },
+        { title: "Order List",         link: "/orders-list",        sub_feature_key: "order_list" },
+        { title: "Pending Order",      link: "/pending-order",      sub_feature_key: "pending_order" },
+        { title: "Complete Order",     link: "/complete-order",     sub_feature_key: "complete_order" },
+        { title: "Cancel Order",       link: "/cancel-order",       sub_feature_key: "cancel_order" },
+        { title: "Kitchen Dashboard",  link: "/kitchen-dashboard",  sub_feature_key: "kitchen_dashboard" },
       ],
     },
     {
       title: "Reservation",
+      module_key: "reservation",
       submanu: true,
       icon: <FaTags />,
       submanuItems: [
-        { title: "All Reservations", link: "/reservation" },
-        { title: "Add Booking", link: "/add-booking" },
-        { title: "Unavailable today", link: "/unavailability-days" },
-        // { title: "Reservation setting", link: "/reservation-setting" },
+        { title: "All Reservations",  link: "/reservation",         sub_feature_key: "all_reservations" },
+        { title: "Add Booking",       link: "/add-booking",         sub_feature_key: "add_booking" },
+        { title: "Unavailable today", link: "/unavailability-days", sub_feature_key: "unavailable_today" },
       ],
     },
     {
       title: "Purchase Manage",
+      module_key: "purchase_manage",
       icon: <FaCartShopping />,
       submanu: true,
       submanuItems: [
-        { title: "Purchase Item", link: "/purchase-item" },
-        { title: "Add Purchase", link: "/add-purchase" },
-        { title: "Purchase Return", link: "/purchase-return" },
-        { title: "Return Invoice", link: "/return-invoice" },
-        { title: "Supplier Manage", link: "/supplier-manage" },
-        { title: "Supplier Ledger", link: "/supplier-ladger" },
+        { title: "Purchase Item",    link: "/purchase-item",    sub_feature_key: "purchase_item" },
+        { title: "Add Purchase",     link: "/add-purchase",     sub_feature_key: "add_purchase" },
+        { title: "Purchase Return",  link: "/purchase-return",  sub_feature_key: "purchase_return" },
+        { title: "Return Invoice",   link: "/return-invoice",   sub_feature_key: "return_invoice" },
+        { title: "Supplier Manage",  link: "/supplier-manage",  sub_feature_key: "supplier_manage" },
+        { title: "Supplier Ledger",  link: "/supplier-ladger",  sub_feature_key: "supplier_ledger" },
       ],
     },
     {
       title: "Food Management",
+      module_key: "food_management",
       icon: <IoHome />,
       submanu: true,
       submanuItems: [
-        { title: "Add Category", link: "/add-category" },
-        { title: "Category List", link: "/category-list" },
-        { title: "Add Food", link: "/add-food" },
-        { title: "Food List", link: "/food-list", module_name: "Food List" },
-        { title: "Menu Type", link: "/menu-type" },
-        { title: "Add Ons", link: "/add-ons" },
+        { title: "Add Category",  link: "/add-category",  sub_feature_key: "add_category" },
+        { title: "Category List", link: "/category-list", sub_feature_key: "category_list" },
+        { title: "Add Food",      link: "/add-food",      sub_feature_key: "add_food" },
+        { title: "Food List",     link: "/food-list",     sub_feature_key: "food_list" },
+        { title: "Menu Type",     link: "/menu-type",     sub_feature_key: "menu_type" },
+        { title: "Add Ons",       link: "/add-ons",       sub_feature_key: "add_ons" },
       ],
     },
     {
       title: "Recipe Management",
+      module_key: "recipe_management",
       icon: <GiCook />,
       submanu: true,
       submanuItems: [
-        { title: "Set Production Unit", link: "/set-production-unit" },
-        { title: "Production Set List", link: "/set-production-list" },
-        { title: "Add Production", link: "/add-production" },
-        // { title: "Production Setting", link: "/working" },
+        { title: "Set Production Unit", link: "/set-production-unit", sub_feature_key: "set_production_unit" },
+        { title: "Production Set List", link: "/set-production-list", sub_feature_key: "production_set_list" },
+        { title: "Add Production",      link: "/add-production",      sub_feature_key: "add_production" },
       ],
     },
 
     {
       title: "Inventory Management",
+      module_key: "inventory_management",
       icon: <MdInventory />,
       submanu: true,
       submanuItems: [
-        { title: "Ingredient stock list", link: "/stock-list" },
-        { title: "Stock out ingredients", link: "/stock-out-ingredients" },
+        { title: "Ingredient stock list",  link: "/stock-list",             sub_feature_key: "ingredient_stock_list" },
+        { title: "Stock out ingredients",  link: "/stock-out-ingredients",  sub_feature_key: "stock_out_ingredients" },
       ],
     },
 
     {
       title: "Loyalty",
+      module_key: "loyalty",
       icon: <FaTrophy />,
       submanu: true,
       submanuItems: [
-        { title: "Point Setting", link: "/point-setting" },
-        { title: "Customer Point List", link: "/customer-point" },
-
-        // { title: "Debit Voucher", link: "/working" },
-        // { title: "Credit Voucher", link: "/working" },
-        // { title: "Contra Voucher", link: "/working" },
-        // { title: "Journal Voucher", link: "/working" },
-        // { title: "Voucher Approved", link: "/working" },
-        // { title: "Account Report", link: "/working" },
+        { title: "Point Setting",       link: "/point-setting",  sub_feature_key: "point_setting" },
+        { title: "Customer Point List", link: "/customer-point", sub_feature_key: "customer_point_list" },
       ],
     },
     {
       title: "Roles & Permission",
+      module_key: "roles_permission",
       icon: <FaLock />,
       submanu: true,
       submanuItems: [
-        // { title: "Permission Setup", link: "/premission-setup" },
-        { title: "Add Role", link: "/add-role" },
-        { title: "Role List", link: "/rolelist" },
-        { title: "User Access Role", link: "/user-access-role" },
+        { title: "Add Role",         link: "/add-role",          sub_feature_key: "add_role" },
+        { title: "Role List",        link: "/rolelist",          sub_feature_key: "role_list" },
+        { title: "User Access Role", link: "/user-access-role",  sub_feature_key: "user_access_role" },
       ],
     },
     {
       title: "User & Staff",
+      module_key: "user_staff",
       icon: <SlPeople />,
       submanu: true,
       submanuItems: [
-        { title: "Add User", link: "/add-user" },
-        { title: "User List", link: "/user-list" },
+        { title: "Add User",   link: "/add-user",   sub_feature_key: "add_user" },
+        { title: "User List",  link: "/user-list",  sub_feature_key: "user_list" },
       ],
     },
     {
       title: "Report",
+      module_key: "report",
       icon: <GoGraph />,
       submanu: true,
       submanuItems: [
-        { title: "Purchase Report", link: "/purchase-report" },
-        { title: "Stock Report (Food Items)", link: "/foodstock-report" },
-        { title: "Stock Report (Kitchen)", link: "/kitchenstock-report" },
-        { title: "Delivery Type Sales Report", link: "/deliverytype-report" },
-        { title: "Sale Report", link: "/sale-report" },
-        { title: "Waiter Sale Report", link: "/waitersale-report" },
-        { title: "Service Charge Report", link: "/servicecharge-report" },
-        { title: "Sale Report cashier", link: "/cashier-report" },
-        { title: "Item Sales Report", link: "/itemsale-report" },
-        { title: "Cash Register Report", link: "/case-register-report" },
-        { title: "Sale Report Filtering", link: "/sale-report-filter" },
-        { title: "Sale By Date", link: "/saleby-day" },
-        { title: "Sale By Table", link: "/saleby-table" },
-
-        { title: "Commission Report", link: "/commission" },
+        { title: "Purchase Report",            link: "/purchase-report",      sub_feature_key: "purchase_report" },
+        { title: "Stock Report (Food Items)",  link: "/foodstock-report",     sub_feature_key: "foodstock_report" },
+        { title: "Stock Report (Kitchen)",     link: "/kitchenstock-report",  sub_feature_key: "kitchenstock_report" },
+        { title: "Delivery Type Sales Report", link: "/deliverytype-report",  sub_feature_key: "deliverytype_report" },
+        { title: "Sale Report",                link: "/sale-report",          sub_feature_key: "sale_report" },
+        { title: "Waiter Sale Report",         link: "/waitersale-report",    sub_feature_key: "waitersale_report" },
+        { title: "Service Charge Report",      link: "/servicecharge-report", sub_feature_key: "servicecharge_report" },
+        { title: "Sale Report cashier",        link: "/cashier-report",       sub_feature_key: "cashier_report" },
+        { title: "Item Sales Report",          link: "/itemsale-report",      sub_feature_key: "itemsale_report" },
+        { title: "Cash Register Report",       link: "/case-register-report", sub_feature_key: "cash_register_report" },
+        { title: "Sale Report Filtering",      link: "/sale-report-filter",   sub_feature_key: "sale_report_filter" },
+        { title: "Sale By Date",               link: "/saleby-day",           sub_feature_key: "saleby_day" },
+        { title: "Sale By Table",              link: "/saleby-table",         sub_feature_key: "saleby_table" },
+        { title: "Commission Report",          link: "/commission",           sub_feature_key: "commission_report" },
       ],
     },
     {
       title: "Master Set UP",
+      module_key: "master_setup",
       icon: <SiUikit />,
       submanu: true,
       submanuItems: [
-        { title: "Unit Measurement", link: "/unit-measurement" },
-        { title: "Ingredients", link: "/ingredient-list" },
-        { title: "Kitchen List", link: "/kitchen-list" },
-        { title: "Printers", link: "/printer-list" },
-        { title: "Table & Floor Manage", link: "/table-list" },
-        { title: "All Table-QR", link: "/alltable-Qr" },
-        { title: "Add Customers", link: "/add-customer" },
-        { title: "Order Type", link: "/customer-type" },
-        { title: "Shipping Type", link: "/shipping-type" },
-        { title: "Add Commission Position", link: "/commission-position" },
-        { title: "Commission Setting", link: "/commission-setting" },
+        { title: "Unit Measurement",        link: "/unit-measurement",    sub_feature_key: "unit_measurement" },
+        { title: "Ingredients",             link: "/ingredient-list",     sub_feature_key: "ingredients" },
+        { title: "Kitchen List",            link: "/kitchen-list",        sub_feature_key: "kitchen_list" },
+        { title: "Printers",                link: "/printer-list",        sub_feature_key: "printers" },
+        { title: "Table & Floor Manage",    link: "/table-list",          sub_feature_key: "table_floor_manage" },
+        { title: "All Table-QR",            link: "/alltable-Qr",         sub_feature_key: "all_table_qr" },
+        { title: "Add Customers",           link: "/add-customer",        sub_feature_key: "add_customers" },
+        { title: "Order Type",              link: "/customer-type",       sub_feature_key: "order_type" },
+        { title: "Shipping Type",           link: "/shipping-type",       sub_feature_key: "shipping_type" },
+        { title: "Add Commission Position", link: "/commission-position", sub_feature_key: "commission_position" },
+        { title: "Commission Setting",      link: "/commission-setting",  sub_feature_key: "commission_setting" },
       ],
     },
     {
       title: "Human Resource",
+      module_key: "human_resource",
       icon: <IoIosPeople />,
       submanu: true,
       submanuItems: [
-        { title: "Designation", link: "/designation" },
-        { title: "Add Employee", link: "/add-employee" },
-        { title: "Manage Employee", link: "/manageemployee" },
-        { title: "Add Expense Item", link: "/addexpenseitem" },
-        { title: "Add Expense", link: "/addexpense" },
-        { title: "Department", link: "/department" },
-        { title: "Division", link: "/division" },
-        ,
-        { title: "Holiday", link: "/holiday" },
-        { title: "Leave Type", link: "/leavetype" },
-        { title: "Leave Application", link: "/leaveapplication" },
-        // { title: "Payroll", link: "/working" },
+        { title: "Designation",       link: "/designation",      sub_feature_key: "designation" },
+        { title: "Add Employee",      link: "/add-employee",     sub_feature_key: "add_employee" },
+        { title: "Manage Employee",   link: "/manageemployee",   sub_feature_key: "manage_employee" },
+        { title: "Add Expense Item",  link: "/addexpenseitem",   sub_feature_key: "add_expense_item" },
+        { title: "Add Expense",       link: "/addexpense",       sub_feature_key: "add_expense" },
+        { title: "Department",        link: "/department",       sub_feature_key: "department" },
+        { title: "Division",          link: "/division",         sub_feature_key: "division" },
+        { title: "Holiday",           link: "/holiday",          sub_feature_key: "holiday" },
+        { title: "Leave Type",        link: "/leavetype",        sub_feature_key: "leave_type" },
+        { title: "Leave Application", link: "/leaveapplication", sub_feature_key: "leave_application" },
       ],
     },
 
@@ -250,12 +274,13 @@ const Nav = () => {
     // },
     {
       title: "Waste Tracking",
+      module_key: "waste_tracking",
       icon: <FaRegTrashCan />,
       submanu: true,
       submanuItems: [
-        { title: "Packaging Food", link: "/packaging-food" },
-        { title: "Purchase Food Waste", link: "/purchasefood-waste" },
-        { title: "Making Food Waste", link: "/makingfood-waste" },
+        { title: "Packaging Food",      link: "/packaging-food",      sub_feature_key: "packaging_food" },
+        { title: "Purchase Food Waste", link: "/purchasefood-waste",  sub_feature_key: "purchasefood_waste" },
+        { title: "Making Food Waste",   link: "/makingfood-waste",    sub_feature_key: "makingfood_waste" },
       ],
     },
     {
@@ -263,9 +288,8 @@ const Nav = () => {
       icon: <IoSettingsOutline />,
       submanu: true,
       submanuItems: [
-        { title: "General Setting", link: "/common-setting" },
-        // { title: "Sound Setting", link: "/sound-setting" },
-        { title: "My Subscription", link: "/my-subscription" },
+        { title: "General Setting", link: "/common-setting",  sub_feature_key: "general_setting" },
+        { title: "My Subscription", link: "/my-subscription", sub_feature_key: "my_subscription" },
         // { title: "Banner Setting", link: "/working" },
         // { title: "Menu Setting", link: "/working" },
         // { title: "SEO Setting", link: "/working" },
@@ -353,11 +377,26 @@ const Nav = () => {
       </div>
       <div>
         {Menus.map((items, index) => {
+          // Hide module if super admin has disabled it (null enabledModuleKeys = show all)
+          if (items.module_key && enabledModuleKeys && !enabledModuleKeys.has(items.module_key)) {
+            return null;
+          }
+
           // Filter submenu items based on permissions
           const filteredSubmenuItems = items.submanuItems
-            ? items.submanuItems.filter((subItem) =>
-                hasAnyPermission(subItem.title)
-              )
+            ? items.submanuItems.filter((subItem) => {
+                if (!hasAnyPermission(subItem.title)) return false;
+                // Hide if super admin explicitly set can_view = 0 for this sub-feature
+                if (
+                  subItem.sub_feature_key &&
+                  subFeaturePerms &&
+                  subFeaturePerms[subItem.sub_feature_key] &&
+                  subFeaturePerms[subItem.sub_feature_key].can_view === 0
+                ) {
+                  return false;
+                }
+                return true;
+              })
             : [];
 
           // Skip rendering if it's a submenu and has no accessible items

@@ -1,7 +1,7 @@
 const db = require("../utils/db");
 
 const createPrinter = (req, res) => {
-  const { printer_name, printer_type, printer_path, kitchen_id, port } =
+  const { printer_name, printer_type, printer_path, kitchen_id, port, capability_profile, character_per_line } =
     req.body;
   const user_id = req.id;
 
@@ -113,9 +113,9 @@ const createPrinter = (req, res) => {
         }
 
         const insertQuery = `
-          INSERT INTO printer_list 
-          (printer_name, printer_type, printer_path,port, kitchen_id, created_by)
-          VALUES (?, ?, ?, ?, ?,?)
+          INSERT INTO printer_list
+          (printer_name, printer_type, printer_path, port, kitchen_id, created_by, capability_profile, character_per_line)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         db.pool.query(
@@ -127,6 +127,8 @@ const createPrinter = (req, res) => {
             port || 9100,
             kitchen_id,
             created_by,
+            capability_profile || 'Default',
+            character_per_line || 32,
           ],
           (err, result) => {
             if (err) {

@@ -71,15 +71,26 @@ const addUser = async (req, res) => {
           const countUsersQuery = "SELECT COUNT(*) AS totalUsers FROM user WHERE created_by = ?";
           db.pool.query(countUsersQuery, [id], async (err, userCountResult) => {
             if (err) return res.status(500).send({ error: "Error counting users", details: err.message });
- 
+
             const totalUsers = userCountResult[0].totalUsers;
-            console.log("userlimit",userLimit,"totausers",totalUsers)
- 
+
+            // Get electron user count for combined total
+            let electronUserCount = 0;
+            try {
+              const electronRows = await dbQuery(
+                "SELECT electron_user_count FROM restaurant_settings WHERE user_id = ? LIMIT 1",
+                [id]
+              );
+              electronUserCount = electronRows[0]?.electron_user_count || 0;
+            } catch(e) {}
+            const totalCombined = totalUsers + electronUserCount;
+            console.log("userlimit", userLimit, "totalUsers(main)", totalUsers, "electron", electronUserCount, "combined", totalCombined);
+
             // 🚫 If plan is limited and limit reached
-            if (userLimit !== 0 && totalUsers >= userLimit) {
+            if (userLimit !== 0 && totalCombined >= userLimit) {
               return res.status(403).send({ error: "User creation limit reached for your plan" });
             }
- 
+
             // ✅ Insert user
             insertUser(subscription_id);
           });
@@ -480,7 +491,7 @@ const loginUser = async (req, res) => {
               superAdmin: user.super_admin === 2,
               planData: plan,
               subscriptionStatus: plan
-                ? new Date() > new Date(plan.end_date)
+                ? (() => { const e = new Date(plan.end_date); e.setDate(e.getDate() + 1); return new Date() > e; })()
                   ? "expired"
                   : "active"
                 : "no_subscription"
@@ -512,8 +523,10 @@ const loginUser = async (req, res) => {
           username: `${user.firstname} ${user.lastname}`,
           isAdmin: false,
           superAdmin: true,
-          websitelink: "https://krayon.softwarestesting.co.in/superadmin",
-          subscriptionStatus: "superadmin"
+          websitelink: process.env.ENV_TYPE === 'PRODUCTION' ? process.env.PROD_SUPER_ADMIN_URL : process.env.DEV_SUPER_ADMIN_URL,
+          subscriptionStatus: "superadmin",
+          planData: null,
+          permData: []
         });
       });
       return;
@@ -535,7 +548,7 @@ const loginUser = async (req, res) => {
       if (plan) {
         if (plan.package_status.toLowerCase() !== "approved") {
           subscriptionStatus = "not_approved";
-        } else if (new Date() > new Date(plan.end_date)) {
+        } else if ((() => { const e = new Date(plan.end_date); e.setDate(e.getDate() + 1); return new Date() > e; })()) {
           subscriptionStatus = "expired";
         } else {
           subscriptionStatus = "active";
@@ -712,10 +725,11 @@ const loginUser = async (req, res) => {
     try {
       const callerUserId = req.id;
       const [callerRows] = await db.pool.promise().query(
-        "SELECT is_admin, created_by FROM user WHERE id = ?", [callerUserId]
+        "SELECT is_admin, created_by, super_admin FROM user WHERE id = ?", [callerUserId]
       );
       if (!callerRows.length) return res.status(404).json({ message: "User not found", success: false });
-      const { is_admin, created_by: callerCreatedBy } = callerRows[0];
+      const { is_admin, created_by: callerCreatedBy, super_admin } = callerRows[0];
+      if (super_admin === 2) return res.status(200).json({ success: true, data: [] });
       const creatorId = is_admin === 1 ? callerUserId : callerCreatedBy;
       if (!creatorId) return res.status(403).json({ message: "Unauthorized", success: false });
 
@@ -850,6 +864,20 @@ const resetPasswordController = async (req, res) => {
   }
 };
 
+const getLiveUserId = async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ success: false, message: "Email is required" });
+  try {
+    const users = await db.query("SELECT id FROM user WHERE email = ? LIMIT 1", [email]);
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    return res.status(200).json({ success: true, user_id: users[0].id });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 const activateExe = async (req, res) => {
   const { email, subscription_key } = req.body;
 
@@ -899,6 +927,20 @@ const activateExe = async (req, res) => {
 
     const restaurant = restaurants?.[0] || null;
 
+    // Fetch sub-users created by this admin
+    const subUsers = await db.query(
+      "SELECT id, firstname, lastname, about, waiter_kitchenToken, email, password, password_reset_token, image, last_login, last_logout, ip_address, counter, status, is_admin, subscription_id, created_by, super_admin FROM user WHERE created_by = ?",
+      [user.id]
+    );
+
+    // Fetch live order count (non-cancelled) for plan limit enforcement in Electron
+    const orderCountRows = await db.query(
+      "SELECT COUNT(*) AS order_count FROM customer_order WHERE created_by = ? AND order_status != 5",
+      [user.id]
+    );
+    const order_count = orderCountRows?.[0]?.order_count || 0;
+    const user_count = (subUsers || []).length;
+
     const plan = {
       plan_id: sub.plan_id,
       package_name: sub.package_name,
@@ -931,11 +973,40 @@ const activateExe = async (req, res) => {
     return res.json({
       success: true,
       message: "EXE activated successfully",
-      data: { user, restaurant, subscription, plan },
+      data: { user, restaurant, subscription, plan, subUsers: subUsers || [], order_count, user_count },
     });
   } catch (error) {
     console.error("ACTIVATE EXE ERROR:", error);
     return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const updateElectronCounts = async (req, res) => {
+  try {
+    const { user_id, electron_user_count, electron_order_count } = req.body;
+    console.log("[updateElectronCounts] received:", { user_id, electron_user_count, electron_order_count });
+    if (!user_id) return res.status(400).json({ success: false, message: "user_id required" });
+
+    const updates = [];
+    const values = [];
+    if (electron_user_count !== undefined) {
+      updates.push("electron_user_count = ?");
+      values.push(electron_user_count);
+    }
+    if (electron_order_count !== undefined) {
+      updates.push("electron_order_count = ?");
+      values.push(electron_order_count);
+    }
+    if (updates.length === 0) return res.status(400).json({ success: false, message: "No fields to update" });
+
+    values.push(user_id);
+    const result = await dbQuery(`UPDATE restaurant_settings SET ${updates.join(", ")} WHERE user_id = ?`, values);
+    console.log("[updateElectronCounts] DB update result affectedRows:", result?.affectedRows);
+
+    return res.json({ success: true });
+  } catch(e) {
+    console.log("[updateElectronCounts] ERROR:", e.message);
+    return res.status(500).json({ success: false, message: e.message });
   }
 };
 
@@ -952,5 +1023,7 @@ const activateExe = async (req, res) => {
     ForgetPasswordController,
     resetPasswordController,
     addBulkUsers,
-    activateExe
+    activateExe,
+    updateElectronCounts,
+    getLiveUserId
   }

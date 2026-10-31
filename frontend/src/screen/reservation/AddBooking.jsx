@@ -31,6 +31,7 @@ const AddBooking = () => {
     totime: "",
   });
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const [errors, setErrors] = useState({});
   const today = new Date().toISOString().split("T")[0];
   // set data for filter
@@ -290,15 +291,14 @@ const AddBooking = () => {
                       className="mt-1 p-1 border border-[#4CBBA1] rounded-sm w-[200px]"
                     />
                   </div>
-                  <HasPermission module="Add Booking" action="access">
-                    {" "}
+                  {canDo('add_booking', 'can_view') && (
                     <button
                       type="submit"
                       className="bg-[#1C1D3E] text-white py-2 px-4 rounded-sm"
                     >
                       Check Availability
                     </button>
-                  </HasPermission>
+                  )}
                 </div>
               </form>
             </div>
@@ -493,22 +493,20 @@ const AddBooking = () => {
             </div>
 
             <div className="flex mt-4 float-right gap-x-3">
-              <HasPermission module="Add Booking" action="delete">
-                <button
-                  className="bg-[#4CBBA1] text-white w-[104px] h-[42px] rounded focus:outline-none focus:shadow-outline"
-                  type="reset"
-                >
-                  Reset
-                </button>
-              </HasPermission>
-              <HasPermission module="Add Booking" action="create">
+              <button
+                className="bg-[#4CBBA1] text-white w-[104px] h-[42px] rounded focus:outline-none focus:shadow-outline"
+                type="reset"
+              >
+                Reset
+              </button>
+              {canDo('add_booking', 'can_create') && (
                 <button
                   className="bg-[#1C1D3E] text-white w-[104px] h-[42px] rounded focus:outline-none focus:shadow-outline"
                   type="submit"
                 >
                   Book
                 </button>
-              </HasPermission>
+              )}
             </div>
           </form>
         </div>

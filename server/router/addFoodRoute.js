@@ -22,6 +22,8 @@ const upload = multer({
   storage: multerStorage,
 });
 
+router.post("/fooditems/import", auth, addfoodController.importFoodItems);
+
 // Route for creating an item food
 router.post(
   "/itemfood",

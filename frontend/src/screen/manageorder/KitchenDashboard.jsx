@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import { IoMdNotifications } from "react-icons/io";
 import { MdOutlineZoomOutMap } from "react-icons/md";
 import useFullScreen from "../../components/useFullScreen";
 import axios from "axios";
+import { AuthContext } from "../../store/AuthContext";
 
 const KitchenDashboard = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
 
   const [isOpen, setOpen] = useState(true);
   const { toggleFullScreen } = useFullScreen();
@@ -383,6 +385,7 @@ const KitchenDashboard = () => {
                           {/* BUTTONS */}
                           {allAccepted ? (
                             <div className="flex gap-2">
+                              {canDo('kitchen_dashboard', 'can_manage') && (
                               <button
                                 onClick={() =>
                                   handlePrepared(
@@ -394,16 +397,19 @@ const KitchenDashboard = () => {
                               >
                                 Prepared
                               </button>
-
+                              )}
+                              {canDo('kitchen_dashboard', 'can_print') && (
                               <button
                                 onClick={() => handlePrintKOT(order)}
                                 className="bg-sky-400 px-4 py-2 rounded text-white text-xl hover:bg-sky-500"
                               >
                                 🖨
                               </button>
+                              )}
                             </div>
                           ) : (
                             <div className="flex gap-2">
+                              {canDo('kitchen_dashboard', 'can_manage') && (
                               <button
                                 onClick={() =>
                                   handleAccept(order.order_id, order.kitchen_id)
@@ -412,7 +418,8 @@ const KitchenDashboard = () => {
                               >
                                 Accept
                               </button>
-
+                              )}
+                              {canDo('kitchen_dashboard', 'can_manage') && (
                               <button
                                 onClick={() =>
                                   setRejectModal({
@@ -425,6 +432,7 @@ const KitchenDashboard = () => {
                               >
                                 Reject
                               </button>
+                              )}
                             </div>
                           )}
                         </div>

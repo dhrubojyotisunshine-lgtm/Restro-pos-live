@@ -34,6 +34,7 @@ const StockReportFoodItem = () => {
   const [selectedFood, setSelectedFood] = useState(""); // Selected Food name
   const [foodData, setFoodData] = useState([]); // all food
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const token = localStorage.getItem("token");
   const getSaledata = () => {
     axios
@@ -265,6 +266,7 @@ const StockReportFoodItem = () => {
     doc.save("data.pdf"); // PDF file name
   };
 
+  if (!canDo('foodstock_report', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -325,6 +327,7 @@ const StockReportFoodItem = () => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('foodstock_report', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -348,6 +351,7 @@ const StockReportFoodItem = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                 </div>
               </section>
             </div>

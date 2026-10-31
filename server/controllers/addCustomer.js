@@ -388,5 +388,86 @@ const deleteCustomer = async (req, res) => {
   }
 };
 
-module.exports = { getCustomers, createCustomer , deleteCustomer,getCustomerById,updateCustomer};
+const importCustomers = (req, res) => {
+  const { rows } = req.body;
+  const user_id = req.id;
+
+  if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ success: false, message: "No data provided" });
+  }
+
+  const checkSubscriptionQuery = "SELECT * FROM superadmin_user_plans WHERE user_id = ?";
+  db.pool.query(checkSubscriptionQuery, [user_id], (err, results) => {
+    if (err) return res.status(500).json({ success: false, message: "Internal server error", error: err });
+
+    const resolveCreatedBy = (callback) => {
+      if (results.length > 0) {
+        callback(user_id);
+      } else {
+        db.pool.query("SELECT created_by FROM user WHERE id = ?", [user_id], (err, data) => {
+          if (err || !data.length || !data[0].created_by) {
+            return res.status(403).json({ success: false, message: "You are not authorized to import customers." });
+          }
+          const created_by = data[0].created_by;
+          db.pool.query(checkSubscriptionQuery, [created_by], (err, creatorResults) => {
+            if (err) return res.status(500).json({ success: false, message: "Internal server error", error: err });
+            if (!creatorResults.length) return res.status(403).json({ success: false, message: "Your creator does not have an active subscription." });
+            callback(created_by);
+          });
+        });
+      }
+    };
+
+    resolveCreatedBy((created_by) => {
+      let imported = 0;
+      let skipped = 0;
+      let index = 0;
+
+      const processNext = () => {
+        if (index >= rows.length) {
+          return res.status(200).json({ success: true, imported, skipped });
+        }
+
+        const row = rows[index++];
+        const name = (row.Customer_Name || "").trim();
+        const email = (row.Email || "").trim();
+        const phone = (row.Mobile || "").toString().trim();
+        const address = (row.Address || "").trim();
+
+        if (!name || !email || !phone || !address) {
+          skipped++;
+          return processNext();
+        }
+
+        db.pool.query(
+          "SELECT * FROM customer_info WHERE customer_email = ? OR customer_phone = ?",
+          [email, phone],
+          (err, dupResults) => {
+            if (err || dupResults.length > 0) {
+              skipped++;
+              return processNext();
+            }
+
+            db.pool.query(
+              "INSERT INTO customer_info (customer_name, customer_email, customer_address, customer_phone, created_by) VALUES (?, ?, ?, ?, ?)",
+              [name, email, address, phone, created_by],
+              (err) => {
+                if (err) {
+                  skipped++;
+                } else {
+                  imported++;
+                }
+                processNext();
+              }
+            );
+          }
+        );
+      };
+
+      processNext();
+    });
+  });
+};
+
+module.exports = { getCustomers, createCustomer, deleteCustomer, getCustomerById, updateCustomer, importCustomers };
 

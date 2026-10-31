@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useContext } from "react";
+import React, { useEffect, useRef, useState, useContext } from "react";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import * as XLSX from "xlsx";
@@ -104,6 +104,9 @@ const AddFood = () => {
   const [searchName, setSearchName] = useState("");
   const [itemImage, setItemImage] = useState(null);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const importInputRef = useRef(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [formData, setFormData] = useState({
     CategoryID: "",
     kitchenid: "",
@@ -389,6 +392,40 @@ const AddFood = () => {
       });
   };
 
+  const processImportFile = async (file) => {
+    if (!file) return;
+    const ext = file.name.split(".").pop().toLowerCase();
+    let rows = [];
+    if (ext === "csv") {
+      await new Promise((resolve) => {
+        Papa.parse(file, { header: true, skipEmptyLines: true, complete: (r) => { rows = r.data; resolve(); } });
+      });
+    } else if (ext === "xlsx") {
+      const buffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const ws = workbook.worksheets[0];
+      const headers = ws.getRow(1).values.slice(1);
+      ws.eachRow((row, n) => {
+        if (n === 1) return;
+        const obj = {};
+        row.values.slice(1).forEach((v, i) => { obj[headers[i]] = v instanceof Date ? v.toISOString().split("T")[0] : v; });
+        rows.push(obj);
+      });
+    } else { toast.error("Only .csv or .xlsx files are supported"); return; }
+    if (!rows.length) { toast.error("No data found in file"); return; }
+    try {
+      const res = await axios.post(`${API_BASE_URL}fooditems/import`, { rows }, { headers: { Authorization: token } });
+      toast.success(`Imported: ${res.data.imported}, Skipped: ${res.data.skipped}`);
+      setShowImportModal(false);
+      cardData();
+    } catch (err) { toast.error(err.response?.data?.message || "Import failed"); }
+  };
+  const handleImport = (e) => { processImportFile(e.target.files[0]); e.target.value = ""; };
+  const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); processImportFile(e.dataTransfer.files[0]); };
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
+
   const cardData = () => {
     axios
       .get(`${API_BASE_URL}/itemfood`, {
@@ -429,6 +466,7 @@ const AddFood = () => {
       });
   };
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const submitUpdateFood = async () => {
     // Validation checks
     if (!editModalData.CategoryID) {
@@ -771,23 +809,32 @@ const AddFood = () => {
                 >
                   Download Sample
                 </button> */}
-                <HasPermission module="Food List" action="create">
-                  <button
-                    onClick={() => {
-                      navigate("/add-food");
-                    }}
-                    className="bg-[#4CBBA1] h-[46px] w-[207px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
-                  >
-                    <IoIosAddCircleOutline className="font-semibold text-lg" />
-                    Add Food
-                  </button>
-                </HasPermission>
+                {canDo('food_list', 'can_create') && (
+                  <HasPermission module="Food List" action="create">
+                    <div className="flex gap-x-2">
+                      <button
+                        onClick={() => { navigate("/add-food"); }}
+                        className="bg-[#4CBBA1] h-[46px] w-[207px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
+                      >
+                        <IoIosAddCircleOutline className="font-semibold text-lg" />
+                        Add Food
+                      </button>
+                      <button
+                        onClick={() => setShowImportModal(true)}
+                        className="bg-[#1C1D3E] h-[46px] px-4 rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
+                      >
+                        Import
+                      </button>
+                    </div>
+                  </HasPermission>
+                )}
               </div>
             </div>
             <div className=" mt-11 w-full">
               <section>
                 <div className=" flex justify-between">
                   <div className=" flex flex-wrap gap-x-5">
+                    {canDo('food_list', 'can_export') && (
                     <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                       <button
                         onClick={() => handleDownload("csv")}
@@ -811,6 +858,7 @@ const AddFood = () => {
                         PDF
                       </button>
                     </div>
+                    )}
                   </div>
                   <div>
                     <div className="flex m-auto   px-4   rounded-md border-[1px] border-gray-900">
@@ -857,33 +905,40 @@ const AddFood = () => {
                         {val.Name}
                       </h2>
                       <h2 className="text-gray-600 text-sm text-center">
+                        {val.kitchen_name}
+                      </h2>
+                      <h2 className="text-gray-600 text-sm text-center">
                         {val.variantName}
                       </h2>
 
                       <div className="flex gap-2 mt-2">
-                        <HasPermission module="Food List" action="edit">
-                          <Tooltip message="Edit">
-                            <button
-                              onClick={() =>
-                                handleEditButtonClick(val.ProductsID)
-                              }
-                              className="bg-[#1C1D3E] p-2 rounded-md text-white hover:scale-105 transition-transform"
-                            >
-                              <FaRegEdit />
-                            </button>
-                          </Tooltip>
-                        </HasPermission>
+                        {canDo('food_list', 'can_edit') && (
+                          <HasPermission module="Food List" action="edit">
+                            <Tooltip message="Edit">
+                              <button
+                                onClick={() =>
+                                  handleEditButtonClick(val.ProductsID)
+                                }
+                                className="bg-[#1C1D3E] p-2 rounded-md text-white hover:scale-105 transition-transform"
+                              >
+                                <FaRegEdit />
+                              </button>
+                            </Tooltip>
+                          </HasPermission>
+                        )}
 
-                        <HasPermission module="Food List" action="delete">
-                          <Tooltip message="Delete">
-                            <button
-                              className="bg-[#FB3F3F] p-2 rounded-md text-white hover:scale-105 transition-transform"
-                              onClick={() => handleDeleteClick(val.ProductsID)}
-                            >
-                              <FaRegTrashCan />
-                            </button>
-                          </Tooltip>
-                        </HasPermission>
+                        {canDo('food_list', 'can_delete') && (
+                          <HasPermission module="Food List" action="delete">
+                            <Tooltip message="Delete">
+                              <button
+                                className="bg-[#FB3F3F] p-2 rounded-md text-white hover:scale-105 transition-transform"
+                                onClick={() => handleDeleteClick(val.ProductsID)}
+                              >
+                                <FaRegTrashCan />
+                              </button>
+                            </Tooltip>
+                          </HasPermission>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1337,6 +1392,32 @@ const AddFood = () => {
         onDelete={handleModalDelete}
         type={"Food"}
       />
+
+      <input ref={importInputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={handleImport} />
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-lg w-[420px] p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Import Food Items</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-white bg-red-500 rounded-sm w-7 h-7 flex items-center justify-center font-bold hover:bg-red-600">✕</button>
+            </div>
+            <div
+              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+              onClick={() => importInputRef.current.click()}
+              className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${isDragging ? 'border-[#4CBBA1] bg-[#f0fdf9]' : 'border-gray-300 hover:border-[#4CBBA1]'}`}
+            >
+              <div className="text-4xl mb-3">📂</div>
+              <p className="text-gray-600 font-medium">Drag & Drop your file here</p>
+              <p className="text-gray-400 text-sm mt-1">or <span className="text-[#4CBBA1] underline">click to browse</span></p>
+              <p className="text-gray-400 text-xs mt-3">Supported formats: .csv, .xlsx</p>
+            </div>
+            <div className="mt-4 text-center">
+              <a href="/frontend/public/food_import_sample.csv" download className="text-sm text-[#4CBBA1] underline">Download Sample File</a>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

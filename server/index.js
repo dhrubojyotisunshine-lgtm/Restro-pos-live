@@ -40,6 +40,7 @@ const addpackagesRoute = require("./router/createPackagesRoute");
 const addcompany = require("./router/addComponayRoute");
 const superadminsettingRoute = require("./router/superAdminSettingRoute");
 const printkotRoute = require("./router/printkotRoute");
+const moduleAllocationRoute = require("./router/moduleAllocationRoute");
 //const testPrintRoute = require("./router/testPrintRoute");
 const http = require("http");
 const { Server } = require("socket.io");
@@ -94,6 +95,7 @@ app.use("/api", superadmincmsRoute);
 app.use("/api", addpackagesRoute);
 app.use("/api", addcompany);
 app.use("/api", superadminsettingRoute);
+app.use("/api", moduleAllocationRoute);
 
 app.use("/login", express.static(path.join(__dirname, "login")));
 app.get("/login/*", (req, res) => {

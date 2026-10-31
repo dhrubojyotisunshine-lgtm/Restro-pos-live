@@ -618,17 +618,17 @@ const orderPlace = async (req, res) => {
     const waiterId = waiter_id || 0;
     const tableId = table_id || 0;
 
-    // 🔥 STEP 1: GET LAST ORDER ID (for invoice) — per company
+    // 🔥 STEP 1: RESOLVE COMPANY OWNER ID
+    const userRow = await runQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [create_by]);
+    const creatorId = (userRow[0]?.is_admin === 1) ? create_by : (userRow[0]?.created_by || create_by);
+
+    // 🔥 STEP 1.5: GET LAST ORDER ID (for invoice) — per company
     const lastOrder = await runQuery(
       "SELECT MAX(CAST(saleinvoice AS UNSIGNED)) AS maxInvoice FROM customer_order WHERE created_by = ?",
-      [create_by]
+      [creatorId]
     );
 
     const invoiceId = lastOrder[0].maxInvoice ? parseInt(lastOrder[0].maxInvoice) + 1 : 1;
-
-    // 🔥 STEP 1.5: INVOICE LIMIT CHECK
-    const userRow = await runQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [create_by]);
-    const creatorId = (userRow[0]?.is_admin === 1) ? create_by : (userRow[0]?.created_by || create_by);
 
     const planRows = await runQuery(
       `SELECT sp.number_of_invoice
@@ -646,7 +646,14 @@ const orderPlace = async (req, res) => {
         "SELECT COUNT(*) AS invoice_count FROM customer_order WHERE created_by = ? AND order_status != 5",
         [creatorId]
       );
-      const currentCount = countRows[0]?.invoice_count || 0;
+      const mainCount = countRows[0]?.invoice_count || 0;
+      const electronRows = await runQuery(
+        "SELECT electron_order_count FROM restaurant_settings WHERE user_id = ? LIMIT 1",
+        [creatorId]
+      );
+      const electronCount = electronRows[0]?.electron_order_count || 0;
+      const currentCount = mainCount + electronCount;
+      console.log("[InvoiceLimit][Main] main:", mainCount, "| electron:", electronCount, "| total:", currentCount, "| limit:", invoiceLimit);
       if (currentCount >= invoiceLimit) {
         return res.status(403).json({
           success: false,
@@ -662,7 +669,7 @@ const orderPlace = async (req, res) => {
        WHERE order_date = CURDATE() AND created_by = ?
        ORDER BY order_id DESC
        LIMIT 1`,
-      [create_by]
+      [creatorId]
     );
 
     let tokenNo = "T1";
@@ -697,7 +704,7 @@ const orderPlace = async (req, res) => {
         tableId,
         tokenNo,
         grand_total,
-        create_by,
+        creatorId,
       ]
     );
 
@@ -927,10 +934,14 @@ const orderPlace_customererrorless = async (req, res) => {
     const waiterId = waiter_id || 0;
     const tableId = table_id || 0;
 
+    // 🔹 RESOLVE COMPANY OWNER ID
+    const kotUserRow = await runQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [create_by]);
+    const kotCreatorId = (kotUserRow[0]?.is_admin === 1) ? create_by : (kotUserRow[0]?.created_by || create_by);
+
     // 🔹 GENERATE INVOICE ID — per company
     const maxOrderIdResult = await runQuery(
       "SELECT MAX(CAST(saleinvoice AS UNSIGNED)) AS maxOrderId FROM customer_order WHERE created_by = ?",
-      [create_by]
+      [kotCreatorId]
     );
 
     const invoiceId = maxOrderIdResult[0].maxOrderId
@@ -948,7 +959,7 @@ const orderPlace_customererrorless = async (req, res) => {
       ORDER BY order_id DESC
       LIMIT 1
       `,
-      [create_by]
+      [kotCreatorId]
     );
 
     let tokenNo = "T1";
@@ -987,7 +998,7 @@ const orderPlace_customererrorless = async (req, res) => {
         tableId,
         tokenNo,
         grand_total,
-        create_by,
+        kotCreatorId,
       ],
     );
 
@@ -1203,10 +1214,14 @@ const orderPlace123 = async (req, res) => {
     const waiterId = waiter_id || 0;
     const tableId = table_id || 0;
 
+    // 🔹 RESOLVE COMPANY OWNER ID
+    const kotUserRow = await runQuery("SELECT is_admin, created_by FROM user WHERE id = ?", [create_by]);
+    const kotCreatorId = (kotUserRow[0]?.is_admin === 1) ? create_by : (kotUserRow[0]?.created_by || create_by);
+
     // 🔹 GENERATE INVOICE ID — per company
     const maxOrderIdResult = await runQuery(
       "SELECT MAX(CAST(saleinvoice AS UNSIGNED)) AS maxOrderId FROM customer_order WHERE created_by = ?",
-      [create_by]
+      [kotCreatorId]
     );
 
     const invoiceId = maxOrderIdResult[0].maxOrderId
@@ -1224,7 +1239,7 @@ const orderPlace123 = async (req, res) => {
       ORDER BY order_id DESC
       LIMIT 1
       `,
-      [create_by]
+      [kotCreatorId]
     );
 
     let tokenNo = "T1";
@@ -1263,7 +1278,7 @@ const orderPlace123 = async (req, res) => {
         tableId,
         tokenNo,
         grand_total,
-        create_by,
+        kotCreatorId,
       ],
     );
 
@@ -3068,9 +3083,16 @@ const Placeqrorder = (req, res) => {
       (saleinvoice, cutomertype, isthirdparty, waiter_id, order_date, order_time, table_no, totalamount, order_status, orderacceptreject, splitpay_status, customer_note, customer_id, created_by)
       VALUES (?, ?, 0, 0, NOW(), CURTIME(), ?, ?, 1, 1, 0, ?, ?, ?)`;
 
+      db.pool.query("SELECT is_admin, created_by FROM user WHERE id = ?", [create_by], (err, userRows) => {
+        if (err) {
+          console.error("Error resolving creator:", err);
+          return res.status(500).json({ message: "Internal server error" });
+        }
+        const creatorId = (userRows[0]?.is_admin === 1) ? create_by : (userRows[0]?.created_by || create_by);
+
       const maxOrderIdQuery =
         "SELECT MAX(saleinvoice) AS maxOrderId FROM customer_order WHERE created_by = ?";
-      db.pool.query(maxOrderIdQuery, [create_by], (err, result) => {
+      db.pool.query(maxOrderIdQuery, [creatorId], (err, result) => {
         if (err) {
           console.error("Error getting max order ID:", err);
           return res.status(500).json({ message: "Internal server error" });
@@ -3088,7 +3110,7 @@ const Placeqrorder = (req, res) => {
             grand_total,
             customer_note,
             customer_id,
-            create_by,
+            creatorId,
           ],
 
           (err, result) => {
@@ -3212,6 +3234,7 @@ const Placeqrorder = (req, res) => {
             });
           },
         );
+      });
       });
     },
   );

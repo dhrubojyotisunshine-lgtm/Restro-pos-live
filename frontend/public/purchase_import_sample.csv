@@ -1,0 +1,5 @@
+Invoice_ID,Supplier_Name,Purchase_Date,Expire_Date,Details,Payment_Method,Paid_Amount,Ingredient_Name,Quantity,Rate
+INV001,ABC Supplies,2024-01-15,2024-06-15,Monthly supplies,Cash,500,Sugar,10,50
+INV001,ABC Supplies,2024-01-15,2024-06-15,Monthly supplies,Cash,500,Salt,5,20
+INV002,XYZ Traders,2024-01-16,2024-06-16,Weekly order,Cash,300,Oil,20,15
+INV002,XYZ Traders,2024-01-16,2024-06-16,Weekly order,Cash,300,Rice,15,20

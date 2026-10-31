@@ -287,15 +287,15 @@ const getSubscriptionsByAdmin = async (req, res) => {
     sp.package_name,
     sp.price_with_currency,
     sup.package_status,
-    sup.start_date,
-    sup.end_date,
-    sup.trial_date,
+    DATE_FORMAT(CONVERT_TZ(sup.start_date, '+00:00', '+05:30'), '%Y-%m-%d') AS start_date,
+    DATE_FORMAT(CONVERT_TZ(sup.end_date, '+00:00', '+05:30'), '%Y-%m-%d') AS end_date,
+    DATE_FORMAT(CONVERT_TZ(sup.trial_date, '+00:00', '+05:30'), '%Y-%m-%d') AS trial_date,
     sup.user_plan_id,
     sup.user_id,
     sup.plan_id,
     CASE
-      WHEN sup.package_status = 'approved' AND sup.end_date >= CURDATE() THEN 'Active'
-      WHEN sup.package_status = 'approved' AND sup.end_date < CURDATE() THEN 'Expired'
+      WHEN sup.package_status = 'approved' AND DATE(CONVERT_TZ(sup.end_date, '+00:00', '+05:30')) >= DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30')) THEN 'Active'
+      WHEN sup.package_status = 'approved' AND DATE(CONVERT_TZ(sup.end_date, '+00:00', '+05:30')) < DATE(CONVERT_TZ(NOW(), '+00:00', '+05:30')) THEN 'Expired'
       WHEN sup.package_status = 'renew_requested' THEN 'Renew Requested'
       WHEN sup.package_status = 'pending' THEN 'Pending'
       WHEN sup.package_status = 'superseded' THEN 'Superseded'

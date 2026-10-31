@@ -55,6 +55,7 @@ const TableList = () => {
     floorName: "",
   });
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
 
   const totalPages = Math.ceil(floors.length / itemsPerPage);
 
@@ -485,6 +486,7 @@ const TableList = () => {
     GetFloorData();
     GetTableData();
   }, []);
+  if (!canDo('table_floor_manage', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div">
@@ -512,6 +514,7 @@ const TableList = () => {
               </div>
             </div>
             <div className="ml-auto flex gap-x-11 mt-11">
+              {canDo('table_floor_manage', 'can_create') && (
               <HasPermission module="Table & Floor Manage" action="create">
                 <button
                   type="button"
@@ -522,7 +525,9 @@ const TableList = () => {
                   Add Table
                 </button>
               </HasPermission>
+              )}
 
+              {canDo('table_floor_manage', 'can_create') && (
               <HasPermission module="Table & Floor Manage" action="create">
                 <button
                   className="bg-[#4CBBA1] h-[46px] w-[165px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
@@ -532,6 +537,7 @@ const TableList = () => {
                   Add Floor
                 </button>
               </HasPermission>
+              )}
             </div>
 
             <div className="h-[65vh] flex flex-col mt-6">
@@ -572,6 +578,7 @@ const TableList = () => {
                       <h1 className="">Records per page</h1>
                     </div>
 
+                    {canDo('table_floor_manage', 'can_export') && (
                     <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                       <button
                         onClick={() => handleDownload("csv")}
@@ -595,6 +602,7 @@ const TableList = () => {
                         PDF
                       </button>
                     </div>
+                    )}
 
                     <div className="flex m-auto px-4  rounded-md border-[1px]   border-gray-900">
                       <button className="px-4 text-[#0f044a] text-sm">
@@ -655,6 +663,7 @@ const TableList = () => {
                           </td> */}
                                 <td className="py-2 px-4 border border-[#4CBBA1]">
                                   <div className="flex justify-center gap-x-2 font-bold">
+                                    {canDo('table_floor_manage', 'can_edit') && (
                                     <HasPermission
                                       module="Table & Floor Manage"
                                       action="edit"
@@ -670,7 +679,9 @@ const TableList = () => {
                                         </button>
                                       </Tooltip>
                                     </HasPermission>
+                                    )}
 
+                                    {canDo('table_floor_manage', 'can_delete') && (
                                     <HasPermission
                                       module="Table & Floor Manage"
                                       action="delete"
@@ -686,6 +697,7 @@ const TableList = () => {
                                         </button>
                                       </Tooltip>
                                     </HasPermission>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -811,6 +823,7 @@ const TableList = () => {
                             </td>
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
+                                {canDo('table_floor_manage', 'can_edit') && (
                                 <HasPermission
                                   module="Table & Floor Manage"
                                   action="edit"
@@ -826,7 +839,9 @@ const TableList = () => {
                                     </button>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
 
+                                {canDo('table_floor_manage', 'can_delete') && (
                                 <HasPermission
                                   module="Table & Floor Manage"
                                   action="delete"
@@ -842,6 +857,7 @@ const TableList = () => {
                                     </button>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
                               </div>
                             </td>
                           </tr>

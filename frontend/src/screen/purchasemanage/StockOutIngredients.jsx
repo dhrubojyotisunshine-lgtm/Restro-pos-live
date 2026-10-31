@@ -20,6 +20,7 @@ import useFullScreen from "../../components/useFullScreen";
 const headers = ["Ingredients", "Quantity"];
 const StockOutIngredients = () => {
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const navigate = useNavigate();
   const { isFullScreen, toggleFullScreen } = useFullScreen();
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -226,6 +227,7 @@ Authorization:token
             <div className=" flex justify-between mt-11">
               <span></span>
 
+              {canDo('stock_out_ingredients', 'can_create') && (
               <button
                 onClick={() => {
                   navigate("/add-purchase");
@@ -236,6 +238,7 @@ Authorization:token
                 <IoIosAddCircleOutline className=" font-semibold text-lg" />
                 Add Purchase
               </button>
+              )}
             </div>
             {/* Search Bar */}
             <div className=" mt-11  w-full">
@@ -274,6 +277,7 @@ Authorization:token
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('stock_out_ingredients', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -297,6 +301,7 @@ Authorization:token
                       PDF
                     </button>
                   </div>
+                  )}
                   <div className="flex m-auto px-4 rounded-md border-[1px]  border-gray-900">
                     <input
                       value={searchName}

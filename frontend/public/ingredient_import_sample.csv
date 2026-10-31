@@ -1,0 +1,5 @@
+Ingredient_Name,Unit_Name,Min_Stock,Status
+Wheat Flour,kg,5,1
+Salt,gm,500,1
+Sugar,kg,3,1
+Milk,ltr,10,1

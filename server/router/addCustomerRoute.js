@@ -3,6 +3,7 @@ const router = express.Router();
 const customerController = require("../controllers/addCustomer");
 const auth = require("../middleware/authicantejwt");
 
+router.post("/customer/import", auth, customerController.importCustomers);
 router.post("/customer", auth, customerController.createCustomer);
 router.get("/customer", auth, customerController.getCustomers);
 router.get("/customer/:customer_id", auth, customerController.getCustomerById);

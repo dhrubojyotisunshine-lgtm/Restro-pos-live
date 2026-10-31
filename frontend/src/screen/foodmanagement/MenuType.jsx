@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import { IoMdNotifications, IoIosAddCircleOutline } from "react-icons/io";
@@ -75,6 +75,10 @@ const MenuType = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const [isOpen, setOpen] = useState(true);
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
+  const importInputRef = useRef(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [data, setData] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [menuModal, setMenuModal] = useState(false);
@@ -254,6 +258,40 @@ const [editErrors, setEditErrors] = useState({
         toast.error("Error fetching filtered data");
       });
   };
+
+  const processImportFile = async (file) => {
+    if (!file) return;
+    const ext = file.name.split(".").pop().toLowerCase();
+    let rows = [];
+    if (ext === "csv") {
+      await new Promise((resolve) => {
+        Papa.parse(file, { header: true, skipEmptyLines: true, complete: (r) => { rows = r.data; resolve(); } });
+      });
+    } else if (ext === "xlsx") {
+      const buffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const ws = workbook.worksheets[0];
+      const headers = ws.getRow(1).values.slice(1);
+      ws.eachRow((row, n) => {
+        if (n === 1) return;
+        const obj = {};
+        row.values.slice(1).forEach((v, i) => { obj[headers[i]] = v instanceof Date ? v.toISOString().split("T")[0] : v; });
+        rows.push(obj);
+      });
+    } else { toast.error("Only .csv or .xlsx files are supported"); return; }
+    if (!rows.length) { toast.error("No data found in file"); return; }
+    try {
+      const res = await axios.post(`${API_BASE_URL}menutype/import`, { rows }, { headers: { Authorization: token } });
+      toast.success(`Imported: ${res.data.imported}, Skipped: ${res.data.skipped}`);
+      setShowImportModal(false);
+      getMenuData();
+    } catch (err) { toast.error(err.response?.data?.message || "Import failed"); }
+  };
+  const handleImport = (e) => { processImportFile(e.target.files[0]); e.target.value = ""; };
+  const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); processImportFile(e.dataTransfer.files[0]); };
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
 
   const fetchData = async () => {
     try {
@@ -435,15 +473,25 @@ const [editErrors, setEditErrors] = useState({
             <div className="flex justify-between mt-11">
               <span></span>
 
-              <HasPermission module="Menu Type" action="create">
-                <button
-                  onClick={() => setMenuModal(true)}
-                  className="bg-[#4CBBA1] h-[46px] text-nowrap w-[200px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
-                >
-                  <IoIosAddCircleOutline className="font-semibold text-lg" />
-                  Add Menu Type
-                </button>
-              </HasPermission>
+              {canDo('menu_type', 'can_create') && (
+                <HasPermission module="Menu Type" action="create">
+                  <div className="flex gap-x-2">
+                    <button
+                      onClick={() => setMenuModal(true)}
+                      className="bg-[#4CBBA1] h-[46px] text-nowrap w-[200px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
+                    >
+                      <IoIosAddCircleOutline className="font-semibold text-lg" />
+                      Add Menu Type
+                    </button>
+                    <button
+                      onClick={() => setShowImportModal(true)}
+                      className="bg-[#1C1D3E] h-[46px] px-4 rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
+                    >
+                      Import
+                    </button>
+                  </div>
+                </HasPermission>
+              )}
             </div>
             {/* Search Bar */}
             <div className="mt-11 w-full">
@@ -482,6 +530,7 @@ const [editErrors, setEditErrors] = useState({
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('menu_type', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -505,6 +554,7 @@ const [editErrors, setEditErrors] = useState({
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px] border-gray-900">
                     <input
@@ -559,39 +609,37 @@ const [editErrors, setEditErrors] = useState({
                              
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
-                                  <HasPermission
-                                    module="Menu Type"
-                                    action="edit"
-                                  >
-                                    <Tooltip message="Edit">
-                                      <button
-                                        onClick={() =>
-                                          handleEditClick(row.menutypeid)
-                                        }
-                                        className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
-                                      >
-                                        <FaRegEdit />
-                                      </button>
-                                    </Tooltip>
-                                  </HasPermission>
-
-                                  <HasPermission
-                                    module="Menu Type"
-                                    action="delete"
-                                  >
-                                    <Tooltip message="Delete MenuType">
-                                      <div>
+                                  {canDo('menu_type', 'can_edit') && (
+                                    <HasPermission module="Menu Type" action="edit">
+                                      <Tooltip message="Edit">
                                         <button
-                                          className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
                                           onClick={() =>
-                                            handleDeleteClick(row.menutypeid)
+                                            handleEditClick(row.menutypeid)
                                           }
+                                          className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
                                         >
-                                          <FaRegTrashCan />
+                                          <FaRegEdit />
                                         </button>
-                                      </div>
-                                    </Tooltip>
-                                  </HasPermission>
+                                      </Tooltip>
+                                    </HasPermission>
+                                  )}
+
+                                  {canDo('menu_type', 'can_delete') && (
+                                    <HasPermission module="Menu Type" action="delete">
+                                      <Tooltip message="Delete MenuType">
+                                        <div>
+                                          <button
+                                            className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
+                                            onClick={() =>
+                                              handleDeleteClick(row.menutypeid)
+                                            }
+                                          >
+                                            <FaRegTrashCan />
+                                          </button>
+                                        </div>
+                                      </Tooltip>
+                                    </HasPermission>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -654,6 +702,32 @@ const [editErrors, setEditErrors] = useState({
         onDelete={handleModalDelete}
         type={"Menu type"}
       />
+
+      <input ref={importInputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={handleImport} />
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-lg w-[420px] p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Import Menu Types</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-white bg-red-500 rounded-sm w-7 h-7 flex items-center justify-center font-bold hover:bg-red-600">✕</button>
+            </div>
+            <div
+              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+              onClick={() => importInputRef.current.click()}
+              className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${isDragging ? 'border-[#4CBBA1] bg-[#f0fdf9]' : 'border-gray-300 hover:border-[#4CBBA1]'}`}
+            >
+              <div className="text-4xl mb-3">📂</div>
+              <p className="text-gray-600 font-medium">Drag & Drop your file here</p>
+              <p className="text-gray-400 text-sm mt-1">or <span className="text-[#4CBBA1] underline">click to browse</span></p>
+              <p className="text-gray-400 text-xs mt-3">Supported formats: .csv, .xlsx</p>
+            </div>
+            <div className="mt-4 text-center">
+              <a href="/frontend/public/menu_type_import_sample.csv" download className="text-sm text-[#4CBBA1] underline">Download Sample File</a>
+            </div>
+          </div>
+        </div>
+      )}
       <DialogBox
         title={"Add Menu Type"}
         onClose={() => setMenuModal(false)}

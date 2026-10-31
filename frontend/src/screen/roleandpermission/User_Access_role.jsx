@@ -12,13 +12,13 @@ import { FaRegTrashCan } from "react-icons/fa6";
 import axios from "axios";
 import DeleteDialogBox from "../../components/DeleteDialogBox";
 import { toast } from "react-toastify";
-import HasPermission from "../../store/HasPermission";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import useFullScreen from "../../components/useFullScreen";
 import { AuthContext } from "../../store/AuthContext";
+import HasPermission from "../../store/HasPermission";
 const headers = ["SL.", "User Name", "Role Name", "Action"];
 const Tooltip = ({ message, children }) => {
   return (
@@ -43,6 +43,7 @@ const User_Access_role = () => {
   const [deleteModalId, setDeleteModalId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
   // roels
   const [roles, setRoles] = useState([]); // Store roles fetched from API
@@ -440,7 +441,8 @@ const User_Access_role = () => {
             </div>
 
             <div className=" flex justify-end mt-11">
-              <HasPermission module="User Access Role" action="create">
+              {canDo('user_access_role', 'can_create') && (
+                <HasPermission module="User Access Role" action="create">
                 <button
                   onClick={() => setCmodal(true)}
                   className=" bg-[#4CBBA1] p-2 rounded-sm  flex justify-center items-center
@@ -449,7 +451,8 @@ const User_Access_role = () => {
                   <IoIosAddCircleOutline className=" font-semibold text-lg" />
                   Assign Role
                 </button>
-              </HasPermission>
+                </HasPermission>
+              )}
             </div>
             {/* Search Bar */}
             <div className=" mt-11  w-full">
@@ -488,6 +491,7 @@ const User_Access_role = () => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('user_access_role', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -511,6 +515,7 @@ const User_Access_role = () => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]  gap-y-3 border-gray-900">
                     <input
@@ -569,10 +574,8 @@ const User_Access_role = () => {
 
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
-                                  <HasPermission
-                                    module="User Access Role"
-                                    action="edit"
-                                  >
+                                  {canDo('user_access_role', 'can_edit') && (
+                                    <HasPermission module="User Access Role" action="edit">
                                     <Tooltip
                                       message="Edit Role"
                                       key={row.role_id}
@@ -586,11 +589,10 @@ const User_Access_role = () => {
                                         <FaRegEdit />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
-                                  <HasPermission
-                                    module="User Access Role"
-                                    action="delete"
-                                  >
+                                    </HasPermission>
+                                  )}
+                                  {canDo('user_access_role', 'can_delete') && (
+                                    <HasPermission module="User Access Role" action="delete">
                                     <Tooltip message="Delete Role">
                                       <div>
                                         <button
@@ -603,7 +605,8 @@ const User_Access_role = () => {
                                         </button>
                                       </div>
                                     </Tooltip>
-                                  </HasPermission>
+                                    </HasPermission>
+                                  )}
                                 </div>
                               </td>
                             </tr>

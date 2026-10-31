@@ -15,7 +15,7 @@ import { FaFirstOrder, FaLock, FaTags } from "react-icons/fa";
 import { FaTrophy } from "react-icons/fa";
 import { MdInventory } from "react-icons/md";
 import { MdSettings, MdDashboard, MdSubscriptions, MdQuestionAnswer } from 'react-icons/md';
-import { FaBoxOpen, FaBuilding } from 'react-icons/fa';
+import { FaBoxOpen, FaBuilding, FaPuzzlePiece } from 'react-icons/fa';
 const Navbar = () => {
   const [open, setOpen] = useState(true);
   const [openSubmenuIndex, setOpenSubmenuIndex] = useState(null);
@@ -51,13 +51,17 @@ const Navbar = () => {
     },
     {
       title: "Companies",
-      icon: <	FaBuilding />,
+      icon: <FaBuilding />,
       submenu: true,
       submenuItems: [
         { title: "Add Company ", link: "/addcompany" },
         { title: "List of companies ", link: "/companylist" },
-       
       ],
+    },
+    {
+      title: "Module Allocation",
+      link: "/companylist",
+      icon: <FaPuzzlePiece />,
     },
     {
       title: "Companies Subscription ",

@@ -332,12 +332,12 @@ const getAllItemFoodDetails = async (req, res) => {
         SELECT
           item_foods.*,
           item_category.*,
-          tbl_kitchen.*,
+          k.kitchen_name,
           tbl_menutype.*
         FROM
           item_foods
         LEFT JOIN item_category ON item_foods.CategoryID = item_category.CategoryID
-        LEFT JOIN tbl_kitchen ON item_foods.kitchenid = tbl_kitchen.kitchenid
+        LEFT JOIN kitchens k ON item_foods.kitchenid = k.id
         LEFT JOIN tbl_menutype ON item_foods.menutype = tbl_menutype.menutypeid
         WHERE
           item_foods.ProductsIsActive = 1
@@ -864,6 +864,105 @@ const updateItemFood = async (req, res) => {
     });
   });
 };
+const importFoodItems = (req, res) => {
+  const { rows } = req.body;
+  const user_id = req.id;
+
+  if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ success: false, message: "No data provided" });
+  }
+
+  const checkSubscriptionQuery = "SELECT * FROM superadmin_user_plans WHERE user_id = ?";
+  db.pool.query(checkSubscriptionQuery, [user_id], (err, results) => {
+    if (err) return res.status(500).json({ success: false, message: "Internal server error", error: err });
+
+    const resolveCreatedBy = (callback) => {
+      if (results.length > 0) {
+        callback(user_id);
+      } else {
+        db.pool.query("SELECT created_by FROM user WHERE id = ?", [user_id], (err, data) => {
+          if (err || !data.length || !data[0].created_by) {
+            return res.status(403).json({ success: false, message: "You are not authorized to import food items." });
+          }
+          const created_by = data[0].created_by;
+          db.pool.query(checkSubscriptionQuery, [created_by], (err, creatorResults) => {
+            if (err) return res.status(500).json({ success: false, message: "Internal server error", error: err });
+            if (!creatorResults.length) return res.status(403).json({ success: false, message: "Creator does not have an active subscription." });
+            callback(created_by);
+          });
+        });
+      }
+    };
+
+    resolveCreatedBy((creator_id) => {
+      // Fetch categories and menu types for this user
+      db.pool.query("SELECT CategoryID, Name, kitchen_id FROM item_category WHERE UserIDInserted = ?", [creator_id], (err, categories) => {
+        if (err) return res.status(500).json({ success: false, message: "Error fetching categories", error: err });
+
+        db.pool.query("SELECT menutypeid, menutype FROM tbl_menutype WHERE created_by = ?", [creator_id], (err, menuTypes) => {
+          if (err) return res.status(500).json({ success: false, message: "Error fetching menu types", error: err });
+
+          // Group rows by Product_Name
+          const groups = {};
+          rows.forEach((row) => {
+            const key = (row.Product_Name || "").trim();
+            if (!key) return;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(row);
+          });
+
+          const productNames = Object.keys(groups);
+          let imported = 0, skipped = 0, idx = 0;
+
+          const processNext = () => {
+            if (idx >= productNames.length) return res.status(200).json({ success: true, imported, skipped });
+
+            const productName = productNames[idx++];
+            const groupRows = groups[productName];
+            const firstRow = groupRows[0];
+
+            const categoryName = (firstRow.Category_Name || "").trim().toLowerCase();
+            const menuTypeName = (firstRow.Menu_Type || "").trim().toLowerCase();
+            const description = (firstRow.Description || "").trim();
+            const vat = firstRow.VAT !== undefined ? Number(firstRow.VAT) : 0;
+            const status = firstRow.Status !== undefined ? Number(firstRow.Status) : 1;
+
+            const category = categories.find((c) => c.Name.toLowerCase() === categoryName);
+            const menuType = menuTypes.find((m) => m.menutype.toLowerCase() === menuTypeName);
+
+            if (!category || !menuType) { skipped++; return processNext(); }
+
+            const kitchenId = category.kitchen_id || null;
+
+            db.pool.query(
+              `INSERT INTO item_foods (CategoryID, UserIDInserted, kitchenid, ProductName, descrip, ProductImage, productvat, special, offerIsavailable, offerstartdate, offerendate, is_customqty, ProductsIsActive, menutype) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [category.CategoryID, creator_id, kitchenId, productName, description, null, vat, 0, 0, null, null, 0, status, menuType.menutypeid],
+              (err, result) => {
+                if (err) { skipped++; return processNext(); }
+
+                const foodId = result.insertId;
+                const variants = groupRows
+                  .filter((r) => (r.Variant_Name || "").trim())
+                  .map((r) => [foodId, Number(r.Price) || 0, (r.Variant_Name || "").trim(), creator_id]);
+
+                if (!variants.length) { imported++; return processNext(); }
+
+                const variantSql = "INSERT INTO variant (menuid, price, variantName, created_by) VALUES ?";
+                db.pool.query(variantSql, [variants], (err) => {
+                  if (err) { skipped++; } else { imported++; }
+                  processNext();
+                });
+              }
+            );
+          };
+
+          processNext();
+        });
+      });
+    });
+  });
+};
+
 module.exports = {
   createItemFood,
   getAllItemFoodDetails,
@@ -871,4 +970,5 @@ module.exports = {
   getItemFoodDetails,
   updateItemFood,
   bulkUploadFoodItems,
+  importFoodItems,
 };

@@ -36,7 +36,8 @@ const AuthProvider = ({ children }) => {
   setUserId(null);
   setUsername(null);
   setIsAdmin(false);
-  setPlanData(null); // Add this line
+  setPlanData(null);
+  setSubFeaturePerms({});
   localStorage.clear();
 }, []);
   // Derived state: isLogin
@@ -115,6 +116,32 @@ const AuthProvider = ({ children }) => {
 
   
 
+  const [subFeaturePerms, setSubFeaturePerms] = useState({});
+
+  // Fetch sub-feature permissions whenever token changes (login/refresh)
+  useEffect(() => {
+    if (token) {
+      axios
+        .get(`${API_BASE_URL}/module-allocation/my-sub-features`, {
+          headers: { Authorization: token },
+        })
+        .then((res) => {
+          if (res.data?.success) setSubFeaturePerms(res.data.data || {});
+        })
+        .catch(() => setSubFeaturePerms({}));
+    }
+  }, [token]);
+
+  // Returns true if the action is allowed for this sub-feature.
+  // Defaults to true when no permission record exists (safe default = show everything).
+  const canDo = useCallback(
+    (subFeatureKey, action) => {
+      if (!subFeaturePerms || !subFeaturePerms[subFeatureKey]) return true;
+      return !!subFeaturePerms[subFeatureKey][action];
+    },
+    [subFeaturePerms]
+  );
+
   // Check and refresh state on component mount
   useEffect(() => {
     if (token) {
@@ -137,7 +164,9 @@ const AuthProvider = ({ children }) => {
       userId,
       username,
       isAdmin,
-      planData, // Make sure this is included
+      planData,
+      subFeaturePerms,
+      canDo,
       storeToken,
       logoutUser,
       isLogin

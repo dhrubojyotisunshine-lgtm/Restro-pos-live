@@ -381,11 +381,86 @@ const getIngredientsDetails = async (req, res) => {
   }
 };
 
+const importIngredients = async (req, res) => {
+  try {
+    const user_id = req.id;
+    const rows = req.body.rows;
+
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ success: false, message: "No data provided" });
+    }
+
+    const [subResults] = await db.pool.promise().query(
+      "SELECT * FROM superadmin_user_plans WHERE user_id = ?", [user_id]
+    );
+
+    let creator_id;
+    if (subResults.length > 0) {
+      creator_id = user_id;
+    } else {
+      const [userData] = await db.pool.promise().query(
+        "SELECT created_by FROM user WHERE id = ?", [user_id]
+      );
+      if (userData.length === 0 || !userData[0].created_by) {
+        return res.status(403).json({ success: false, message: "You are not authorized to import ingredients." });
+      }
+      const created_by = userData[0].created_by;
+      const [creatorSub] = await db.pool.promise().query(
+        "SELECT * FROM superadmin_user_plans WHERE user_id = ?", [created_by]
+      );
+      if (creatorSub.length === 0) {
+        return res.status(403).json({ success: false, message: "Creator does not have an active subscription." });
+      }
+      creator_id = created_by;
+    }
+
+    const [units] = await db.pool.promise().query(
+      "SELECT id, uom_name, uom_short_code FROM unit_of_measurement"
+    );
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const row of rows) {
+      const ingredient_name = (row.Ingredient_Name || "").trim();
+      const unit_name = (row.Unit_Name || "").trim();
+      const min_stock = row.Min_Stock || 0;
+      const status = row.Status !== undefined ? parseInt(row.Status) : 1;
+
+      if (!ingredient_name || !unit_name) { skipped++; continue; }
+
+      const unit = units.find(u =>
+        u.uom_short_code.toLowerCase() === unit_name.toLowerCase() ||
+        u.uom_name.toLowerCase() === unit_name.toLowerCase()
+      );
+      if (!unit) { skipped++; continue; }
+
+      const [existing] = await db.pool.promise().query(
+        "SELECT id FROM ingredients WHERE ingredient_name = ? AND created_by = ?",
+        [ingredient_name, creator_id]
+      );
+      if (existing.length > 0) { skipped++; continue; }
+
+      await db.pool.promise().query(
+        "INSERT INTO ingredients (ingredient_name, uom_id, min_stock, status, is_active, created_by) VALUES (?, ?, ?, ?, 1, ?)",
+        [ingredient_name, unit.id, parseFloat(min_stock), status, creator_id]
+      );
+      imported++;
+    }
+
+    return res.json({ success: true, imported, skipped });
+  } catch (error) {
+    console.error("Import ingredients error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   createIngredient,
   getAllIngredients,
   deleteIngredient,
   getIngredientById,
   updateIngredient,
-  getIngredientsDetails
+  getIngredientsDetails,
+  importIngredients
 };

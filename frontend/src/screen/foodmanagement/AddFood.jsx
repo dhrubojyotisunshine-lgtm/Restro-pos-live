@@ -56,6 +56,7 @@ const AddFood = () => {
   const [itemImage, setItemImage] = useState(null);
   const [data, setData] = useState([]);
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const initialFormData = {
     name: "",
     parentid: "",
@@ -562,15 +563,17 @@ const AddFood = () => {
                 </div>
 
                 {/* Add Category Button (conditionally rendered) */}
-                <HasPermission module="Category List" action="create">
-                  <button
-                    onClick={() => navigate("/add-category")}
-                    className="bg-[#4CBBA1] hover:bg-[#3CA991] text-white font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-2 transition-colors duration-300 transform hover:scale-105 w-full sm:w-auto mt-4 sm:mt-0"
-                  >
-                    <IoIosAddCircleOutline className="text-xl" />
-                    Add Category
-                  </button>
-                </HasPermission>
+                {canDo('add_food', 'can_create') && (
+                  <HasPermission module="Add Food" action="create">
+                    <button
+                      onClick={() => navigate("/add-category")}
+                      className="bg-[#4CBBA1] hover:bg-[#3CA991] text-white font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-2 transition-colors duration-300 transform hover:scale-105 w-full sm:w-auto mt-4 sm:mt-0"
+                    >
+                      <IoIosAddCircleOutline className="text-xl" />
+                      Add Category
+                    </button>
+                  </HasPermission>
+                )}
               </div>
             </div>
             {/* Add Food Section*/}
@@ -924,14 +927,16 @@ const AddFood = () => {
                   {/* Button */}
 
                   <div className="flex justify-end space-x-4">
-                    <HasPermission module="Add Food" action="create">
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-[#4CBBA1] text-white rounded-md hover:bg-green-600"
-                      >
-                        Save
-                      </button>
-                    </HasPermission>
+                    {canDo('add_food', 'can_create') && (
+                      <HasPermission module="Add Food" action="create">
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-[#4CBBA1] text-white rounded-md hover:bg-green-600"
+                        >
+                          Save
+                        </button>
+                      </HasPermission>
+                    )}
                   </div>
                 </form>
               </div>

@@ -203,6 +203,7 @@ const verifyToken = async (req, res, next) => {
 
     const now = new Date();
     const endDate = new Date(plan.end_date);
+    endDate.setDate(endDate.getDate() + 1);
 
     if (!isExempt && endDate < now) {
       return res.status(403).json({

@@ -800,6 +800,70 @@ const updateLeaveApply = (req, res) => {
 };
   
   
+const importHolidays = async (req, res) => {
+  try {
+    const user_id = req.id;
+    const rows = req.body.rows;
+
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ success: false, message: "No data provided" });
+    }
+
+    const [subResults] = await db.pool.promise().query(
+      "SELECT * FROM superadmin_user_plans WHERE user_id = ?", [user_id]
+    );
+
+    let creator_id;
+    if (subResults.length > 0) {
+      creator_id = user_id;
+    } else {
+      const [userData] = await db.pool.promise().query(
+        "SELECT created_by FROM user WHERE id = ?", [user_id]
+      );
+      if (userData.length === 0 || !userData[0].created_by) {
+        return res.status(403).json({ success: false, message: "You are not authorized to import holidays." });
+      }
+      const created_by = userData[0].created_by;
+      const [creatorSub] = await db.pool.promise().query(
+        "SELECT * FROM superadmin_user_plans WHERE user_id = ?", [created_by]
+      );
+      if (creatorSub.length === 0) {
+        return res.status(403).json({ success: false, message: "Creator does not have an active subscription." });
+      }
+      creator_id = created_by;
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const row of rows) {
+      const holiday_name = (row.Holiday_Name || "").trim();
+      const start_date = (row.Start_Date || "").trim();
+      const end_date = (row.End_Date || "").trim();
+      const no_of_days = row.No_Of_Days || 1;
+
+      if (!holiday_name || !start_date || !end_date || !no_of_days) { skipped++; continue; }
+
+      const [existing] = await db.pool.promise().query(
+        "SELECT payrl_holi_id FROM payroll_holiday WHERE holiday_name = ? AND created_by = ?",
+        [holiday_name, creator_id]
+      );
+      if (existing.length > 0) { skipped++; continue; }
+
+      await db.pool.promise().query(
+        "INSERT INTO payroll_holiday (holiday_name, start_date, end_date, no_of_days, created_by) VALUES (?, ?, ?, ?, ?)",
+        [holiday_name, start_date, end_date, parseInt(no_of_days), creator_id]
+      );
+      imported++;
+    }
+
+    return res.json({ success: true, imported, skipped });
+  } catch (error) {
+    console.error("Import holidays error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
   module.exports = {
     getHolidays,
     createHoliday,
@@ -815,6 +879,7 @@ const updateLeaveApply = (req, res) => {
   getLeaveApplies,
   updateLeaveApply,
   deleteLeaveApply,
-  getLeaveApplyById
-  
+  getLeaveApplyById,
+  importHolidays
+
   };

@@ -1594,6 +1594,138 @@ const addDepartment = (req, res) => {
 
  
  
+const importEmployees = async (req, res) => {
+  try {
+    const user_id = req.id;
+    const rows = req.body.rows;
+
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ success: false, message: "No data provided" });
+    }
+
+    const subQuery = "SELECT * FROM superadmin_user_plans WHERE user_id = ?";
+    const [subResults] = await db.pool.promise().query(subQuery, [user_id]);
+
+    let creator_id;
+    if (subResults.length > 0) {
+      creator_id = user_id;
+    } else {
+      const [userData] = await db.pool.promise().query(
+        "SELECT created_by FROM user WHERE id = ?", [user_id]
+      );
+      if (userData.length === 0 || !userData[0].created_by) {
+        return res.status(403).json({ success: false, message: "You are not authorized to import employees." });
+      }
+      const created_by = userData[0].created_by;
+      const [creatorSub] = await db.pool.promise().query(subQuery, [created_by]);
+      if (creatorSub.length === 0) {
+        return res.status(403).json({ success: false, message: "Creator does not have an active subscription." });
+      }
+      creator_id = created_by;
+    }
+
+    // Load positions and divisions for creator
+    const [positions] = await db.pool.promise().query(
+      "SELECT pos_id, position_name FROM `position` WHERE created_by = ?", [creator_id]
+    );
+    const [divisions] = await db.pool.promise().query(
+      "SELECT dept_id, department_name FROM department WHERE created_by = ?", [creator_id]
+    );
+
+    const positionMap = {};
+    positions.forEach(p => { positionMap[p.position_name.toLowerCase()] = p.pos_id; });
+
+    const divisionMap = {};
+    divisions.forEach(d => { divisionMap[d.department_name.toLowerCase()] = d.dept_id; });
+
+    let imported = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const first_name = (row.First_Name || "").trim();
+      const last_name = (row.Last_Name || "").trim();
+      const email = (row.Email || "").trim();
+      const phone = (row.Phone || "").trim();
+      const dob = (row.DOB || "").trim() || null;
+      const gender = (row.Gender || "").trim() || null;
+      const country = (row.Country || "").trim() || null;
+      const state = (row.State || "").trim() || null;
+      const city = (row.City || "").trim() || null;
+      const zip = (row.Zip || "").trim() || null;
+      const designationName = (row.Designation || "").trim();
+      const divisionName = (row.Division || "").trim();
+      const duty_type = (row.Duty_Type || "").trim() || null;
+      const marital_status = (row.Marital_Status || "").trim() || "";
+      const emerg_contct = (row.Emergency_Contact || "").trim();
+      const emrg_w_phone = (row.Emergency_Phone || "").trim();
+      const hire_date = (row.Hire_Date || "").trim() || null;
+      const original_hire_date = (row.Original_Hire_Date || "").trim() || hire_date;
+      const termination_date = (row.Termination_Date || "").trim() || hire_date;
+      const rehire_date = (row.Rehire_Date || "").trim() || hire_date;
+      const rate_type = (row.Rate_Type || "").trim();
+      const rate = (row.Rate !== undefined && row.Rate !== null && row.Rate !== '') ? parseFloat(row.Rate) : 0;
+      const pay_frequency = (row.Pay_Frequency || "").trim();
+      // optional fields
+      const home_email = (row.Home_Email || "").trim();
+      const home_phone = (row.Home_Phone || "").trim();
+
+      // Validate fields actually enforced by the form + format checks
+      if (!first_name || !last_name || !email || !phone || !dob || !gender ||
+          !duty_type || !hire_date || !country || !state || !city || !zip) {
+        errors.push(`Row ${i + 1}: Missing required field(s)`);
+        skipped++; continue;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errors.push(`Row ${i + 1}: Invalid email`);
+        skipped++; continue;
+      }
+
+      // Resolve Designation (required by form)
+      const pos_id = designationName ? positionMap[designationName.toLowerCase()] : null;
+      if (!pos_id) {
+        errors.push(`Row ${i + 1}: Designation "${designationName}" not found`);
+        skipped++; continue;
+      }
+
+      // Resolve Division (optional — skip row only if provided but not found)
+      let division_id = null;
+      if (divisionName) {
+        division_id = divisionMap[divisionName.toLowerCase()];
+        if (!division_id) {
+          errors.push(`Row ${i + 1}: Division "${divisionName}" not found`);
+          skipped++; continue;
+        }
+      }
+
+      const [existing] = await db.pool.promise().query(
+        "SELECT emp_his_id FROM employee_history WHERE email = ? OR phone = ?",
+        [email, phone]
+      );
+      if (existing.length > 0) { skipped++; continue; }
+
+      const employee_id = "EMP" + Math.floor(Math.random() * 100000);
+      await db.pool.promise().query(
+        `INSERT INTO employee_history (employee_id, pos_id, first_name, last_name, email, phone, hire_date, original_hire_date,
+          termination_date, rehire_date, dob, gender, country, state, city, zip, division_id, duty_type, marital_status,
+          home_email, home_phone, emerg_contct, emrg_w_phone, rate_type, rate, pay_frequency, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [employee_id, pos_id, first_name, last_name, email, phone, hire_date, original_hire_date,
+          termination_date, rehire_date, dob, gender, country, state, city, zip, division_id, duty_type, marital_status,
+          home_email, home_phone, emerg_contct, emrg_w_phone, rate_type, rate, pay_frequency, creator_id]
+      );
+      imported++;
+    }
+
+    return res.json({ success: true, imported, skipped, errors });
+  } catch (error) {
+    console.error("Import employees error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getAllEmployeeHistories,
   createDesignation,
@@ -1620,6 +1752,6 @@ module.exports = {
   updateDivison,
   deletePosition,
   getPositionById,
-  updatePosition
-  
+  updatePosition,
+  importEmployees
 };

@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import { IoMdNotifications, IoIosAddCircleOutline } from "react-icons/io";
@@ -18,7 +18,7 @@ import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import { AuthContext } from "../../store/AuthContext";
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 const Tooltip = ({ message, children }) => {
   return (
     <div className="group relative flex">
@@ -68,6 +68,10 @@ const [formData2, setFormData2] = useState({
 });
 
 const token = localStorage.getItem("token");
+const { canDo } = useContext(AuthContext);
+const importInputRef = useRef(null);
+const [showImportModal, setShowImportModal] = useState(false);
+const [isDragging, setIsDragging] = useState(false);
 const [currentPage, setCurrentPage] = useState(1);
 const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -269,6 +273,73 @@ const handleSubmit2 = (e) => {
 };
 
 
+const processImportFile = async (file) => {
+  if (!file) return;
+  const ext = file.name.split(".").pop().toLowerCase();
+  let rows = [];
+
+  if (ext === "csv") {
+    await new Promise((resolve) => {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => { rows = results.data; resolve(); },
+      });
+    });
+  } else if (ext === "xlsx") {
+    const buffer = await file.arrayBuffer();
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer);
+    const worksheet = workbook.worksheets[0];
+    const headerRow = worksheet.getRow(1).values.slice(1);
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const obj = {};
+      row.values.slice(1).forEach((val, i) => {
+        obj[headerRow[i]] = val instanceof Date
+          ? val.toISOString().split("T")[0]
+          : val;
+      });
+      rows.push(obj);
+    });
+  } else {
+    toast.error("Only .csv or .xlsx files are supported");
+    return;
+  }
+
+  if (rows.length === 0) {
+    toast.error("No data found in file");
+    return;
+  }
+
+  try {
+    const res = await axios.post(
+      `${API_BASE_URL}customer/import`,
+      { rows },
+      { headers: { Authorization: token } }
+    );
+    toast.success(`Imported: ${res.data.imported}, Skipped: ${res.data.skipped}`);
+    setShowImportModal(false);
+    getCustomer();
+  } catch (err) {
+    toast.error(err.response?.data?.message || "Import failed");
+  }
+};
+
+const handleImport = (e) => {
+  processImportFile(e.target.files[0]);
+  e.target.value = "";
+};
+
+const handleDrop = (e) => {
+  e.preventDefault();
+  setIsDragging(false);
+  processImportFile(e.dataTransfer.files[0]);
+};
+
+const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+const handleDragLeave = () => setIsDragging(false);
+
 const fetchData = async () => {
   try {
     const response = await axios.get(`${API_BASE_URL}/customer`, { headers: { Authorization: token } });
@@ -373,7 +444,7 @@ const downloadPDF = async () => {
   doc.text("Data Export", 20, 10);
 
   // Add a table
-  doc.autoTable({
+  autoTable(doc, {
     head: [
       [
          "Customer Name", "E-mail", "Phone Number","Customer Address"
@@ -427,16 +498,25 @@ const downloadPDF = async () => {
 
             <div className="flex justify-between mt-11">
               <span></span>
-<HasPermission module="Add Customers" action="create">
-<button
-                onClick={() => setCmodal(true)}
-                
-                className="bg-[#4CBBA1] h-[46px] w-[165px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
-              >
-                <IoIosAddCircleOutline className="font-semibold text-lg" />
-                Add Customer
-              </button>
-</HasPermission>
+{canDo('add_customer', 'can_create') && (
+  <HasPermission module="Add Customers" action="create">
+    <div className="flex gap-x-2">
+      <button
+        onClick={() => setCmodal(true)}
+        className="bg-[#4CBBA1] h-[46px] w-[165px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
+      >
+        <IoIosAddCircleOutline className="font-semibold text-lg" />
+        Add Customer
+      </button>
+      <button
+        onClick={() => setShowImportModal(true)}
+        className="bg-[#1C1D3E] h-[46px] px-4 rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
+      >
+        Import
+      </button>
+    </div>
+  </HasPermission>
+)}
              
              
             </div>
@@ -478,7 +558,8 @@ const downloadPDF = async () => {
                 </div>
 
                
-  <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
+  {canDo('add_customer', 'can_export') && (
+                  <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
                       className="hover:bg-[#1C1D3E] text-[#000] hover:scale-110 duration-300 hover:text-white border-[2px] border-zinc-300 rounded-md py-2 px-11 w-full sm:w-auto"
@@ -501,6 +582,7 @@ const downloadPDF = async () => {
                       PDF
                     </button>
                   </div>
+                  )}
  
 
 
@@ -558,25 +640,29 @@ const downloadPDF = async () => {
                             </td>
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
-                              <HasPermission module="Add Customers" action="edit">
-                                <Tooltip message="Edit">
-                                  <button 
-                                  onClick={() => handleEditClick(row.customer_id)}
-                                  className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105">
-                                    <FaRegEdit />
-                                  </button> 
-                                </Tooltip>
+                              {canDo('add_customer', 'can_edit') && (
+                                <HasPermission module="Add Customers" action="edit">
+                                  <Tooltip message="Edit">
+                                    <button
+                                      onClick={() => handleEditClick(row.customer_id)}
+                                      className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105">
+                                      <FaRegEdit />
+                                    </button>
+                                  </Tooltip>
                                 </HasPermission>
+                              )}
+                              {canDo('add_customer', 'can_delete') && (
                                 <HasPermission module="Add Customers" action="delete">
-                                <Tooltip message="Delete">
-                                  <button
-                                    onClick={() => handleDeleteClick(row.customer_id)}
-                                    className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
-                                  >
-                                    <FaRegTrashCan />
-                                  </button>
-                                </Tooltip>
+                                  <Tooltip message="Delete">
+                                    <button
+                                      onClick={() => handleDeleteClick(row.customer_id)}
+                                      className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
+                                    >
+                                      <FaRegTrashCan />
+                                    </button>
+                                  </Tooltip>
                                 </HasPermission>
+                              )}
                               </div>
                             </td>
                           </tr>
@@ -689,7 +775,6 @@ const downloadPDF = async () => {
                 </label>
                 <input
                   type="tel"
-                  pattern="[0-9]{10,15}"
                   maxLength={10}
                   onChange={handelChange}
                   value={formData.customer_phone}
@@ -788,7 +873,6 @@ const downloadPDF = async () => {
                 </label>
                 <input
                   type="tel"
-                  pattern="[0-9]{10,15}"
                   maxLength={10}
                   onChange={handleChange2}
                   value={formData2.customer_phone}
@@ -842,6 +926,47 @@ const downloadPDF = async () => {
         onClose={handleModalClose}
         onDelete={handleModalDelete}
       />
+
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".csv,.xlsx"
+        className="hidden"
+        onChange={handleImport}
+      />
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-lg w-[420px] p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Import Customers</h2>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-white bg-red-500 rounded-sm w-7 h-7 flex items-center justify-center font-bold hover:bg-red-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => importInputRef.current.click()}
+              className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${isDragging ? 'border-[#4CBBA1] bg-[#f0fdf9]' : 'border-gray-300 hover:border-[#4CBBA1]'}`}
+            >
+              <div className="text-4xl mb-3">📂</div>
+              <p className="text-gray-600 font-medium">Drag & Drop your file here</p>
+              <p className="text-gray-400 text-sm mt-1">or <span className="text-[#4CBBA1] underline">click to browse</span></p>
+              <p className="text-gray-400 text-xs mt-3">Supported formats: .csv, .xlsx</p>
+            </div>
+            <div className="mt-4 text-center">
+              <a href="/frontend/public/customer_import_sample.csv" download className="text-sm text-[#4CBBA1] underline">
+                Download Sample File
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
    </>
   )
 }

@@ -66,6 +66,7 @@ const PackagingFood = () => {
   };
 
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const handleReset = () => {
     setFromDate("");
     setToDate("");
@@ -377,6 +378,8 @@ const PackagingFood = () => {
     getingredientlist();
   }, []);
 
+  if (!canDo('packaging_food', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
+
   return (
     <>
       <div className="main_div ">
@@ -476,6 +479,7 @@ const PackagingFood = () => {
                           className="border-[1px] border-[#4CBBA1] p-2 rounded"
                         />
 
+                        {canDo('packaging_food', 'can_create') && (
                         <div className="cursor-pointer flex justify-center items-center gap-x-2 text-white font-normal bg-[#FB3F3F] p-2 rounded">
                           <FaRegTrashCan />
                           <button
@@ -485,9 +489,11 @@ const PackagingFood = () => {
                             Delete
                           </button>
                         </div>
+                        )}
                       </div>
                     ))}
 
+                    {canDo('packaging_food', 'can_create') && (
                     <button
                       type="button"
                       onClick={handleAddItem}
@@ -495,7 +501,9 @@ const PackagingFood = () => {
                     >
                       Add More Item
                     </button>
+                    )}
                   </div>
+{canDo('packaging_food', 'can_create') && (
 <HasPermission module="Packaging Food" action="create">
 <button
                     type="submit"
@@ -504,6 +512,7 @@ const PackagingFood = () => {
                     Submit
                   </button>
 </HasPermission>
+)}
                   
                 </form>
               </div>
@@ -546,6 +555,7 @@ const PackagingFood = () => {
                     </div>
                     <h1>Records per page</h1>
                   </div>
+                  {canDo('packaging_food', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -569,6 +579,7 @@ const PackagingFood = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                 </div>
               </section>
             </div>

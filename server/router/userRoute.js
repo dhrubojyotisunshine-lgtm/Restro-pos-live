@@ -34,6 +34,8 @@ router.put("/updateuser/:id", upload.single("image"), auth, userControllers.upda
 // log in api routs
 router.post("/login", userControllers.loginUser);
 router.post("/activate-exe", userControllers.activateExe);
+router.post("/get-user-id", userControllers.getLiveUserId);
+router.post("/update-electron-counts", userControllers.updateElectronCounts);
 router.post("/logout/:id", userControllers.logoutUser);
 
 router.get('/countries', userControllers.getAllCountry);

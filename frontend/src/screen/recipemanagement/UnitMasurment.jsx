@@ -49,6 +49,7 @@ const UnitMasurment = () => {
     is_active: 1,
   });
 const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const ActionButtons = [{ btn: "CSV" }, { btn: "Excel" }, { btn: "PDF" }];
 
   const headers = ["SL.", "Unit Name", "Short Name", "Action"];
@@ -336,15 +337,17 @@ const token = localStorage.getItem("token");
             </div>
             <div className="flex justify-between mt-11">
               <span></span>
-              <HasPermission module="Unit Measurement" action="create">
-                <button
-                  onClick={() => setUnitModal(true)}
-                  className="bg-[#4CBBA1] h-[46px] w-[165px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
-                >
-                  <IoIosAddCircleOutline className="font-semibold text-lg" />
-                  Add Unit
-                </button>
-              </HasPermission>
+              {canDo('unit_measurement', 'can_create') && (
+                <HasPermission module="Unit Measurement" action="create">
+                  <button
+                    onClick={() => setUnitModal(true)}
+                    className="bg-[#4CBBA1] h-[46px] w-[165px] rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
+                  >
+                    <IoIosAddCircleOutline className="font-semibold text-lg" />
+                    Add Unit
+                  </button>
+                </HasPermission>
+              )}
             </div>
             <div className="mt-11 w-full">
               <section className="table_button">
@@ -382,6 +385,7 @@ const token = localStorage.getItem("token");
                     <h1 className="">Records per page</h1>
                   </div>
 
+                  {canDo('unit_measurement', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -405,6 +409,7 @@ const token = localStorage.getItem("token");
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4  rounded-md border-[1px]   border-gray-900">
                     <button className="px-4 text-[#0f044a] text-sm">
@@ -456,32 +461,30 @@ const token = localStorage.getItem("token");
                             </td>
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
-                                <HasPermission
-                                  module="Unit Measurement"
-                                  action="edit"
-                                >
-                                  <Tooltip message="Edit">
-                                    <button
-                                      onClick={() => handleEditClick(row.id)}
-                                      className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
-                                    >
-                                      <FaRegEdit />
-                                    </button>
-                                  </Tooltip>
-                                </HasPermission>
-                                <HasPermission
-                                  module="Unit Measurement"
-                                  action="delete"
-                                >
-                                  <Tooltip message="Cancel Order">
-                                    <button
-                                      onClick={() => handleDeleteClick(row.id)}
-                                      className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
-                                    >
-                                      <FaRegTrashCan />
-                                    </button>
-                                  </Tooltip>
-                                </HasPermission>
+                                {canDo('unit_measurement', 'can_edit') && (
+                                  <HasPermission module="Unit Measurement" action="edit">
+                                    <Tooltip message="Edit">
+                                      <button
+                                        onClick={() => handleEditClick(row.id)}
+                                        className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
+                                      >
+                                        <FaRegEdit />
+                                      </button>
+                                    </Tooltip>
+                                  </HasPermission>
+                                )}
+                                {canDo('unit_measurement', 'can_delete') && (
+                                  <HasPermission module="Unit Measurement" action="delete">
+                                    <Tooltip message="Delete">
+                                      <button
+                                        onClick={() => handleDeleteClick(row.id)}
+                                        className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
+                                      >
+                                        <FaRegTrashCan />
+                                      </button>
+                                    </Tooltip>
+                                  </HasPermission>
+                                )}
                               </div>
                             </td>
                           </tr>

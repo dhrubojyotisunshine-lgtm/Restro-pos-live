@@ -300,11 +300,66 @@ const deleteMenuType = async (req, res) => {
 };
  
  
+const importMenuTypes = (req, res) => {
+  const { rows } = req.body;
+  const user_id = req.id;
+
+  if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ success: false, message: "No data provided" });
+  }
+
+  const checkSubscriptionQuery = "SELECT * FROM superadmin_user_plans WHERE user_id = ?";
+  db.pool.query(checkSubscriptionQuery, [user_id], (err, results) => {
+    if (err) return res.status(500).json({ success: false, message: "Internal server error", error: err });
+
+    const resolveCreatedBy = (callback) => {
+      if (results.length > 0) {
+        callback(user_id);
+      } else {
+        db.pool.query("SELECT created_by FROM user WHERE id = ?", [user_id], (err, data) => {
+          if (err || !data.length || !data[0].created_by) {
+            return res.status(403).json({ success: false, message: "You are not authorized to import menu types." });
+          }
+          const created_by = data[0].created_by;
+          db.pool.query(checkSubscriptionQuery, [created_by], (err, creatorResults) => {
+            if (err) return res.status(500).json({ success: false, message: "Internal server error", error: err });
+            if (!creatorResults.length) return res.status(403).json({ success: false, message: "Creator does not have an active subscription." });
+            callback(created_by);
+          });
+        });
+      }
+    };
+
+    resolveCreatedBy((created_by) => {
+      let imported = 0, skipped = 0, index = 0;
+
+      const processNext = () => {
+        if (index >= rows.length) return res.status(200).json({ success: true, imported, skipped });
+
+        const row = rows[index++];
+        const menutype = (row.Menu_Type || "").trim();
+        const status = row.Status !== undefined ? Number(row.Status) : 1;
+
+        if (!menutype) { skipped++; return processNext(); }
+
+        db.pool.query(
+          "INSERT INTO tbl_menutype (menutype, status, created_by) VALUES (?, ?, ?)",
+          [menutype, status, created_by],
+          (err) => { if (err) skipped++; else imported++; processNext(); }
+        );
+      };
+
+      processNext();
+    });
+  });
+};
+
 module.exports = {
   deleteMenuType,
   updateMenuType,
   getAllMenuTypes,
   createMenuType,
   getTableBySale,
-  getMenuTypeById
+  getMenuTypeById,
+  importMenuTypes
 };

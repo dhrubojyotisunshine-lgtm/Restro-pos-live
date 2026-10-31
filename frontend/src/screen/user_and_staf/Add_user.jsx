@@ -3,6 +3,7 @@ import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import * as XLSX from "xlsx";
 import { AuthContext } from "../../store/AuthContext";
+import HasPermission from "../../store/HasPermission";
 import { IoMdNotifications } from "react-icons/io";
 import { IoSettings } from "react-icons/io5";
 import { LiaLanguageSolid } from "react-icons/lia";
@@ -10,9 +11,9 @@ import { MdOutlineZoomOutMap } from "react-icons/md";
 import { toast } from "react-toastify";
 import axios from "axios";
 import useFullScreen from "../../components/useFullScreen";
-import HasPermission from "../../store/HasPermission";
 const Add_user = () => {
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const [isOpen, setOpen] = useState(true);
   const initialFormData = {
@@ -551,7 +552,8 @@ const SubmitData = async (e) => {
                       className="size-5 custom-checkbox"
                     />
                   </div>
-                  <HasPermission module="Add User" action="create">
+                  {canDo('add_user', 'can_create') && (
+                    <HasPermission module="Add User" action="create">
                     <div className="float-right flex ml-16 space-x-4">
                       <button
                         type="reset"
@@ -563,13 +565,14 @@ const SubmitData = async (e) => {
 
                       <button
                         type="submit"
-                      
+
                         className="w-[104px] h-[42px] bg-[#1C1D3E] text-white rounded-md"
                       >
                         Save
                       </button>
                     </div>
-                  </HasPermission>
+                    </HasPermission>
+                  )}
                 </div>
               </form>
             </div>

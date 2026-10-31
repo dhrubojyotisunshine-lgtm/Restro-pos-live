@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import './App.css'
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -19,8 +19,25 @@ import CompanySubscriptionList from './screen/CompanySubscriptionList';
 import BasicCompanySetting from './screen/BasicCompanySetting';
 import Enquiry from './screen/Enquiry';
 import ManagePackagePage from './screen/ManagePackagePage';
+import ModuleAllocation from './screen/ModuleAllocation';
 
 function App() {
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Enter") return;
+      const active = document.activeElement;
+      if (!active) return;
+      if (active.tagName !== "INPUT") return;
+      if (active.type === "checkbox" || active.type === "radio") return;
+      const container = active.closest("form, .modal, [role='dialog'], .dialog, .popup");
+      if (!container) return;
+      const submitBtn = container.querySelector("button[type='submit']:not([disabled])");
+      if (submitBtn) submitBtn.click();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   return (
     <>
       <Routes>
@@ -141,6 +158,14 @@ function App() {
           element={
             <ProtectedSuperAdminRoute>
               <Enquiry />
+            </ProtectedSuperAdminRoute>
+          }
+        />
+        <Route
+          path="/module-allocation/:adminId"
+          element={
+            <ProtectedSuperAdminRoute>
+              <ModuleAllocation />
             </ProtectedSuperAdminRoute>
           }
         />

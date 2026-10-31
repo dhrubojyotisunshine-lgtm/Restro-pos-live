@@ -656,6 +656,77 @@ const syncCategory = async (req, res) => {
   }
 };
 
+const importCategories = (req, res) => {
+  const { rows } = req.body;
+  const user_id = req.id;
+
+  if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ success: false, message: "No data provided" });
+  }
+
+  const checkSubscriptionQuery = "SELECT * FROM superadmin_user_plans WHERE user_id = ?";
+  db.pool.query(checkSubscriptionQuery, [user_id], (err, results) => {
+    if (err) return res.status(500).json({ success: false, message: "Internal server error", error: err });
+
+    const resolveCreatedBy = (callback) => {
+      if (results.length > 0) {
+        callback(user_id);
+      } else {
+        db.pool.query("SELECT created_by FROM user WHERE id = ?", [user_id], (err, data) => {
+          if (err || !data.length || !data[0].created_by) {
+            return res.status(403).json({ success: false, message: "You are not authorized to import categories." });
+          }
+          const created_by = data[0].created_by;
+          db.pool.query(checkSubscriptionQuery, [created_by], (err, creatorResults) => {
+            if (err) return res.status(500).json({ success: false, message: "Internal server error", error: err });
+            if (!creatorResults.length) return res.status(403).json({ success: false, message: "Creator does not have an active subscription." });
+            callback(created_by);
+          });
+        });
+      }
+    };
+
+    resolveCreatedBy((creator_id) => {
+      db.pool.query("SELECT id, kitchen_name FROM kitchens WHERE created_by = ?", [creator_id], (err, kitchens) => {
+        if (err) return res.status(500).json({ success: false, message: "Error fetching kitchens" });
+
+        const kitchenMap = {};
+        kitchens.forEach(k => { kitchenMap[k.kitchen_name.toLowerCase()] = k.id; });
+
+        let imported = 0, skipped = 0, errors = [], index = 0;
+
+        const processNext = () => {
+          if (index >= rows.length) return res.status(200).json({ success: true, imported, skipped, errors });
+
+          const row = rows[index++];
+          const name = (row.Category_Name || "").trim();
+          const kitchenName = (row.Kitchen_Name || "").trim();
+          const status = row.Status !== undefined ? Number(row.Status) : 1;
+
+          if (!name || !kitchenName) {
+            errors.push(`Row ${index}: Category_Name and Kitchen_Name are required`);
+            skipped++; return processNext();
+          }
+
+          const kitchen_id = kitchenMap[kitchenName.toLowerCase()];
+          if (!kitchen_id) {
+            errors.push(`Row ${index}: Kitchen "${kitchenName}" not found`);
+            skipped++; return processNext();
+          }
+
+          db.pool.query(
+            `INSERT INTO item_category (Name, parentid, offerstartdate, offerendate, CategoryIsActive, CategoryImage, isoffer, kitchen_id, UserIDInserted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [name, 0, null, null, status, null, 0, kitchen_id, creator_id],
+            (err) => { if (err) { errors.push(`Row ${index}: ${err.sqlMessage || err.message}`); skipped++; } else imported++; processNext(); }
+          );
+        };
+
+        processNext();
+      });
+    });
+  });
+};
+
 module.exports = {
   getCategory,
   addCategory,
@@ -664,4 +735,5 @@ module.exports = {
   addCategoriesBulk,
   getCategoryById,
   syncCategory,
+  importCategories,
 };

@@ -36,7 +36,8 @@ const CancleOrder = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [pageLimit] = useState(10);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
- const token = localStorage.getItem("token");
+  const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const headers = [
     "SL.",
     "Order ID",
@@ -357,7 +358,7 @@ const CancleOrder = () => {
                     <h1>Records per page</h1>
                   </div>
 
-                 
+                  {canDo('cancel_order', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -381,6 +382,7 @@ const CancleOrder = () => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -464,11 +466,7 @@ const CancleOrder = () => {
 
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className=" flex gap-x-2  font-bold ">
-                                  <HasPermission
-                                    module="Cancel Order"
-                                    action="access"
-                                  >
-                                    {" "}
+                                  {canDo('cancel_order', 'can_print') && (
                                     <Tooltip message="Invoice">
                                       {" "}
                                       <button
@@ -480,13 +478,8 @@ const CancleOrder = () => {
                                         <IoDocumentTextOutline />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
-
-                                  <HasPermission
-                                    module="Cancel Order"
-                                    action="access"
-                                  >
-                                    {" "}
+                                  )}
+                                  {canDo('cancel_order', 'can_manage') && (
                                     <Tooltip message="Check Status">
                                       {" "}
                                       <button
@@ -498,7 +491,7 @@ const CancleOrder = () => {
                                         <FaRegEye />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
+                                  )}
                                 </div>
                               </td>
                             </tr>

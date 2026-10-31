@@ -46,7 +46,7 @@ const UnavilablityDays = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editId, setEditId] = useState(null);
   const [data, setData] = useState([]);
-  const { token, userId } = useContext(AuthContext);
+  const { token, userId, canDo } = useContext(AuthContext);
   const [errors, setErrors] = useState({});
 const [errors2, setErrors2] = useState({});
   const [formData, setFormdata] = useState({
@@ -393,8 +393,7 @@ const handleEditClick = (id) => {
 
             <div className=" flex justify-between mt-11">
               <span></span>
-              <HasPermission module="Unavailable today" action="create">
-                {" "}
+              {canDo('unavailable_today', 'can_create') && (
                 <button
                   onClick={() => setCmodal(true)}
                   className=" bg-[#4CBBA1] h-[46px] w-[165px] text-wrap rounded-sm  flex justify-center items-center
@@ -403,7 +402,7 @@ const handleEditClick = (id) => {
                   <IoIosAddCircleOutline className=" font-semibold text-lg" />
                   Add Unavailability
                 </button>
-              </HasPermission>
+              )}
             </div>
             {/* Search Bar */}
 
@@ -443,6 +442,7 @@ const handleEditClick = (id) => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('unavailable_today', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -466,6 +466,7 @@ const handleEditClick = (id) => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   {/* <div className="flex m-auto px-4 rounded-md border-[1px]  mt-5 border-gray-900">
                     <input
@@ -532,10 +533,7 @@ const handleEditClick = (id) => {
                               </td>
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
-                                  <HasPermission
-                                    module="Unavailable today"
-                                    action="edit"
-                                  >
+                                  {canDo('unavailable_today', 'can_edit') && (
                                     <Tooltip message="Edit">
                                       <button
                                         onClick={() =>
@@ -546,11 +544,8 @@ const handleEditClick = (id) => {
                                         <FaRegEdit />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
-                                  <HasPermission
-                                    module="Unavailable today"
-                                    action="delete"
-                                  >
+                                  )}
+                                  {canDo('unavailable_today', 'can_delete') && (
                                     <Tooltip message="Delete">
                                       <button
                                         onClick={() =>
@@ -561,7 +556,7 @@ const handleEditClick = (id) => {
                                         <FaRegTrashCan />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
+                                  )}
                                 </div>
                               </td>
                             </tr>

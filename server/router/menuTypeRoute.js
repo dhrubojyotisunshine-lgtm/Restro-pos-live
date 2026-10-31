@@ -22,6 +22,7 @@ const express = require("express");
 const router = express.Router();
 const menuController = require("../controllers/menuType");
 
+router.post("/menutype/import", auth, menuController.importMenuTypes);
 router.post(
   "/menutype",
   upload.single("menu_icon"), auth,

@@ -42,6 +42,7 @@ const SaleReportFilter = () => {
   );
 
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const selectPage = (page) => {
     if (page > 0 && page <= Math.ceil(serviceData.length / itemsPerPage)) {
       setCurrentPage(page);
@@ -267,6 +268,7 @@ const SaleReportFilter = () => {
   useEffect(() => {
     getServiceSaledata();
   }, []);
+  if (!canDo('sale_report_filter', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -324,6 +326,7 @@ const SaleReportFilter = () => {
                     </div>
                     <h1>Records per page</h1>
                   </div>
+                  {canDo('sale_report_filter', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -347,6 +350,7 @@ const SaleReportFilter = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                 </div>
               </section>
             </div>

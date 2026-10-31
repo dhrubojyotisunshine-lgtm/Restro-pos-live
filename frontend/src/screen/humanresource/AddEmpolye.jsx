@@ -31,6 +31,7 @@ const AddEmpolye = () => {
   const [cities, setCities] = useState([]);
 
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const token = localStorage.getItem("token");
 
   // full screen
@@ -423,6 +424,7 @@ const AddEmpolye = () => {
     setStep(step - 1);
   };
 
+  if (!canDo('add_employee', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <>
@@ -1006,6 +1008,7 @@ const AddEmpolye = () => {
                       >
                         Previous
                       </button>
+                      {canDo('add_employee', 'can_create') && (
                       <HasPermission module="Add Employee" action="create">
                         <button
                           type="submit"
@@ -1015,6 +1018,7 @@ const AddEmpolye = () => {
                           Submit
                         </button>
                       </HasPermission>
+                      )}
                     </form>
                   </div>
                 )}

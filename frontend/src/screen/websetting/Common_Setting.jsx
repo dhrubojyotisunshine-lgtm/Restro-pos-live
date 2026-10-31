@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import { IoMdNotifications } from "react-icons/io";
@@ -9,6 +9,7 @@ import * as Yup from "yup";
 import axios from "axios";
 import useFullScreen from "../../components/useFullScreen";
 import HasPermission from "../../store/HasPermission";
+import { AuthContext } from "../../store/AuthContext";
 
 const Common_Setting = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -17,6 +18,7 @@ const Common_Setting = () => {
   const [isOpen, setOpen] = useState(true);
   const [dataa, setdataa] = useState([]);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
 
   const initialValues = {
     restro_name: "",
@@ -117,6 +119,8 @@ const Common_Setting = () => {
       setSubmitting(false);
     }
   };
+
+  if (!canDo('general_setting', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
 
   return (
     <div className="main_div">
@@ -299,6 +303,7 @@ const Common_Setting = () => {
                     </div>
 
                     {/* Buttons */}
+                    {canDo('general_setting', 'can_manage') && (
                     <HasPermission module="Add User" action="create">
                       <div className="float-right flex ml-16 space-x-4">
                         <button
@@ -316,6 +321,7 @@ const Common_Setting = () => {
                         </button>
                       </div>
                     </HasPermission>
+                    )}
                   </div>
                 </Form>
               )}

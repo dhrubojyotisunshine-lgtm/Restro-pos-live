@@ -38,6 +38,7 @@ const PurchaseFoodwaste = () => {
   const [wasteData, setWasteData] = useState([]);
   const [userData, setUserData] = useState([]);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   //all ingrident with price and stock Quantiity
   const [apiItems, setApiItems] = useState([]);
   const [userId, setUserId] = useState("");
@@ -436,6 +437,8 @@ const handleSubmit = async (e) => {
     fetchUserData();
     IngredientsQuantity();
   }, []);
+  if (!canDo('purchasefood_waste', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
+
   return (
     <>
       <div className="main_div ">
@@ -555,6 +558,7 @@ const handleSubmit = async (e) => {
                         />
 
                         {/* Delete Button */}
+                        {canDo('purchasefood_waste', 'can_create') && (
                         <div className="cursor-pointer flex justify-center items-center gap-x-2 text-white font-normal bg-[#FB3F3F] p-2 rounded">
                           <FaRegTrashCan />
                           <button
@@ -564,9 +568,11 @@ const handleSubmit = async (e) => {
                             Delete
                           </button>
                         </div>
+                        )}
                       </div>
                     ))}
 
+                    {canDo('purchasefood_waste', 'can_create') && (
                     <button
                       type="button"
                       onClick={handleAddItem}
@@ -574,7 +580,9 @@ const handleSubmit = async (e) => {
                     >
                       Add More Item
                     </button>
+                    )}
                   </div>
+{canDo('purchasefood_waste', 'can_create') && (
 <HasPermission module="Purchase Food Waste" action="create">
 <button
                     type="submit"
@@ -583,6 +591,7 @@ const handleSubmit = async (e) => {
                     Submit
                   </button>
 </HasPermission>
+)}
                   
                 </form>
               </div>
@@ -625,6 +634,7 @@ const handleSubmit = async (e) => {
                     </div>
                     <h1>Records per page</h1>
                   </div>
+                  {canDo('purchasefood_waste', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -648,6 +658,7 @@ const handleSubmit = async (e) => {
                       PDF
                     </button>
                   </div>
+                  )}
                 </div>
               </section>
             </div>

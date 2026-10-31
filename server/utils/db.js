@@ -78,6 +78,47 @@ const getConnection = () => {
   });
 };
 
+const runMigrations = () => {
+  const migrations = [
+    `CREATE TABLE IF NOT EXISTS superadmin_module_allocation (
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      admin_user_id INT NOT NULL,
+      module_key    VARCHAR(100) NOT NULL,
+      module_name   VARCHAR(100) NOT NULL,
+      is_enabled    TINYINT(1) NOT NULL DEFAULT 1,
+      created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_admin_module (admin_user_id, module_key)
+    )`,
+    `CREATE TABLE IF NOT EXISTS superadmin_sub_feature_permissions (
+      id              INT AUTO_INCREMENT PRIMARY KEY,
+      admin_user_id   INT NOT NULL,
+      module_key      VARCHAR(100) NOT NULL,
+      sub_feature_key VARCHAR(100) NOT NULL,
+      can_view        TINYINT(1) DEFAULT 1,
+      can_create      TINYINT(1) DEFAULT 1,
+      can_edit        TINYINT(1) DEFAULT 1,
+      can_delete      TINYINT(1) DEFAULT 0,
+      can_print       TINYINT(1) DEFAULT 0,
+      can_export      TINYINT(1) DEFAULT 0,
+      can_manage      TINYINT(1) DEFAULT 0,
+      created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_admin_sub_feature (admin_user_id, module_key, sub_feature_key)
+    )`,
+  ];
+
+  migrations.forEach((sql) => {
+    pool.query(sql, (err) => {
+      if (err) {
+        console.error("❌ Migration failed:", err.message);
+      }
+    });
+  });
+};
+
+runMigrations();
+
 module.exports = {
   pool,
   getConnection,

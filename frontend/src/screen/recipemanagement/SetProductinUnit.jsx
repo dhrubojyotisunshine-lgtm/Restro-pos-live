@@ -24,6 +24,7 @@ const SetProductionUnit = () => {
   ]);
   const [ingredientlist, setIngredientlist] = useState([]); // item information
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const getFoodData = () => {
     axios
       .get(`${API_BASE_URL}/foodname`,{
@@ -189,8 +190,8 @@ const SetProductionUnit = () => {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText);
+      const errorJson = await response.json().catch(() => ({}));
+      throw new Error(errorJson.message || "Something went wrong.");
     }
 
     const data = await response.json();
@@ -361,14 +362,16 @@ const SetProductionUnit = () => {
                     Add More Item
                   </button>
                 </div>
-<HasPermission module="Set Production Unit" action="create">
-<button
-                  type="submit"
-                  className="h-[42px] w-[168px] bg-[#1C1D3E] text-white p-2 rounded mt-4"
-                >
-                  Submit
-                </button>
-</HasPermission>
+{canDo('set_production_unit', 'can_create') && (
+  <HasPermission module="Set Production Unit" action="create">
+    <button
+      type="submit"
+      className="h-[42px] w-[168px] bg-[#1C1D3E] text-white p-2 rounded mt-4"
+    >
+      Submit
+    </button>
+  </HasPermission>
+)}
                
               </form>
             </div>

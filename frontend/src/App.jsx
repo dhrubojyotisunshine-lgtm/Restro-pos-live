@@ -134,6 +134,29 @@ import KitchenStatus from "./screen/posscreen/KItchenStatus";
 import KitchenDashboard from "./screen/manageorder/KitchenDashboard";
 
 const App = () => {
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Enter") return;
+      const active = document.activeElement;
+      if (!active) return;
+      const tag = active.tagName;
+      if (tag !== "INPUT") return; // only trigger from input fields
+      if (active.type === "checkbox" || active.type === "radio") return;
+      // must be inside a form or modal container
+      const container = active.closest("form, .modal, [role='dialog'], .dialog, .popup");
+      if (!container) return;
+      const submitBtn =
+        container.querySelector("button[type='submit']:not([disabled])") ||
+        container.querySelector("button.bg-\\[\\#4CBBA1\\]:not([disabled]):not([type='reset'])");
+      if (submitBtn) {
+        e.preventDefault();
+        submitBtn.click();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   const [isCashRegisterOpen, setIsCashRegisterOpen] = useState(() => {
     const savedTimestamp = localStorage.getItem("isCashRegisterOpen");
     if (!savedTimestamp) return false;

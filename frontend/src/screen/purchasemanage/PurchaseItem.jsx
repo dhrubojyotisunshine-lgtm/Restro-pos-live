@@ -19,6 +19,7 @@ import autoTable from "jspdf-autotable";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import useFullScreen from "../../components/useFullScreen";
+import { useRef } from "react";
 const headers = [
   "SL.",
   "Invoice No.",
@@ -52,6 +53,7 @@ const PurchaseItem = () => {
   const [itemsPerPage, setItemsPerPage] = useState(5);
   const [searchName, setSearchName] = useState("");
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const [grandTotal, setGrandTotal] = useState(0);
   const [apiItems, setApiItems] = useState([]);
   const [suppler, setSuppler] = useState([]);
@@ -87,6 +89,57 @@ const PurchaseItem = () => {
   };
 
   const navigate = useNavigate();
+  const importInputRef = useRef(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const processImportFile = async (file) => {
+    if (!file) return;
+    setShowImportModal(false);
+    const ext = file.name.split('.').pop().toLowerCase();
+    let rows = [];
+    try {
+      if (ext === 'csv') {
+        const text = await file.text();
+        const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+        rows = result.data;
+      } else if (ext === 'xlsx' || ext === 'xls') {
+        const buffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const worksheet = workbook.worksheets[0];
+        const headers = [];
+        worksheet.getRow(1).eachCell(cell => headers.push(String(cell.value || '')));
+        worksheet.eachRow((row, rowNum) => {
+          if (rowNum === 1) return;
+          const obj = {};
+          row.eachCell((cell, colNum) => {
+            const val = cell.value;
+            obj[headers[colNum - 1]] = val instanceof Date ? val.toISOString().split('T')[0] : (val !== null && val !== undefined ? String(val) : '');
+          });
+          if (Object.values(obj).some(v => v)) rows.push(obj);
+        });
+      } else {
+        toast.error('Please upload a .csv or .xlsx file');
+        return;
+      }
+
+      const response = await axios.post(`${API_BASE_URL}purchaseitem/import`, { rows }, {
+        headers: { Authorization: token },
+      });
+      toast.success(response.data.message);
+      getPurchaseData();
+    } catch (error) {
+      toast.error('Import failed. Please check the file format.');
+      console.error(error);
+    }
+    if (importInputRef.current) importInputRef.current.value = '';
+  };
+
+  const handleImport = (e) => { processImportFile(e.target.files[0]); };
+  const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); processImportFile(e.dataTransfer.files[0]); };
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
 
   const [editId, setEditId] = useState(null);
   const getPurchaseData = () => {
@@ -636,7 +689,7 @@ const PurchaseItem = () => {
 
             <div className=" flex justify-between mt-11">
               <span></span>
-              <HasPermission module="Purchase Item" action="create">
+              {canDo('purchase_item', 'can_create') && (
                 <button
                   onClick={() => {
                     navigate("/add-purchase");
@@ -647,7 +700,7 @@ const PurchaseItem = () => {
                   <IoIosAddCircleOutline className=" font-semibold text-lg" />
                   Add Purchase
                 </button>
-              </HasPermission>
+              )}
             </div>
             {/* Search Bar */}
             <div className=" mt-11  w-full">
@@ -686,6 +739,7 @@ const PurchaseItem = () => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('purchase_item', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -709,6 +763,18 @@ const PurchaseItem = () => {
                       PDF
                     </button>
                   </div>
+                  )}
+                  {canDo('purchase_item', 'can_create') && (
+                  <div className="w-full sm:w-auto flex gap-x-3 items-center">
+                    <input ref={importInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImport} />
+                    <button
+                      onClick={() => setShowImportModal(true)}
+                      className="hover:bg-[#4CBBA1] text-[#000] hover:scale-110 duration-300 hover:text-white border-[2px] border-[#4CBBA1] rounded-md py-2 px-6 w-full sm:w-auto"
+                    >
+                      Import
+                    </button>
+                  </div>
+                  )}
                   <div className="flex m-auto px-4 rounded-md border-[1px]  border-gray-900">
                     <input
                       value={searchName}
@@ -786,10 +852,7 @@ const PurchaseItem = () => {
                               </td>
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
-                                  <HasPermission
-                                    module="Purchase Item"
-                                    action="edit"
-                                  >
+                                  {canDo('purchase_item', 'can_edit') && (
                                     <Tooltip message="Edit">
                                       <button
                                         onClick={() =>
@@ -800,7 +863,7 @@ const PurchaseItem = () => {
                                         <FaRegEdit />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
+                                  )}
                                   <Tooltip message="History">
                                     <button
                                       onClick={() =>
@@ -1358,6 +1421,32 @@ const PurchaseItem = () => {
               >
                 Pay Now
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-lg w-[420px] p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Import Purchases</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-white bg-red-500 rounded-sm w-7 h-7 flex items-center justify-center text-sm hover:scale-105">✕</button>
+            </div>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => importInputRef.current.click()}
+              className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${isDragging ? 'border-[#4CBBA1] bg-[#f0fdf9]' : 'border-gray-300 hover:border-[#4CBBA1]'}`}
+            >
+              <div className="text-4xl mb-3">📂</div>
+              <p className="text-gray-600 font-medium">Drag & Drop your file here</p>
+              <p className="text-gray-400 text-sm mt-1">or <span className="text-[#4CBBA1] underline">click to browse</span></p>
+              <p className="text-gray-400 text-xs mt-3">Supported formats: .csv, .xlsx</p>
+            </div>
+            <div className="mt-4 text-center">
+              <a href="/frontend/public/purchase_import_sample.csv" download className="text-sm text-[#4CBBA1] underline">Download Sample File</a>
             </div>
           </div>
         </div>

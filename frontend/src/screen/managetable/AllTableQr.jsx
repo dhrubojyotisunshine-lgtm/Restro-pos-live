@@ -10,6 +10,7 @@ const AllTableQr = () => {
   const [isOpen, setOpen] = useState(true);
   const [tableData, setTableData] = useState([]);
 const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
 
   const getallTable = () => {
     axios
@@ -31,6 +32,7 @@ const token = localStorage.getItem("token");
   useEffect(() => {
     getallTable();
   }, []);
+  if (!canDo('all_table_qr', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div">

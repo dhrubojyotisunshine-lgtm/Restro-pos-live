@@ -35,6 +35,7 @@ const DeleverySaleReport = () => {
   const [selectedFood, setSelectedFood] = useState(""); // Selected Food name
   const [foodData, setFoodData] = useState([]); // all food
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const token = localStorage.getItem("token");
   const getSaledata = () => {
     axios
@@ -253,6 +254,7 @@ autoTable(doc,{
 
     doc.save("data.pdf"); // PDF file name
   };
+  if (!canDo('deliverytype_report', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
     <div className="main_div ">
@@ -314,6 +316,7 @@ autoTable(doc,{
                   <h1>Records per page</h1>
                 </div>
 
+                {canDo('deliverytype_report', 'can_export') && (
                 <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                   <button
                     onClick={() => handleDownload("csv")}
@@ -337,6 +340,7 @@ autoTable(doc,{
                     PDF
                   </button>
                 </div>
+                )}
               </div>
             </section>
           </div>

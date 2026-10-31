@@ -30,8 +30,9 @@ const PrinterList = () => {
   const [kitchenData, setKitchenData] = useState([]);
   const initialFormData = {
     printer_name: "",
-    printer_type: "usb",
+    printer_type: "",
     printer_path: "",
+    port: "",
     kitchen_id: "",
   };
  
@@ -46,6 +47,7 @@ const PrinterList = () => {
     setFormdata({ ...formdata, [e.target.name]: e.target.value });
   };
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
 
 
     // Validate form fields
@@ -93,22 +95,24 @@ const PrinterList = () => {
 
 const handleSubmit = (e) => {
   e.preventDefault();
+  const isNetwork = formdata.printer_type === "network";
   let newErrors = {};
 
   if (!formdata.printer_name) newErrors.printer_name = "Printer name is required";
   if (!formdata.printer_type) newErrors.printer_type = "Printer type is required";
-  if (!formdata.printer_path) newErrors.printer_path = "Printer path is required";
+  if (isNetwork && !formdata.printer_path) newErrors.printer_path = "IP Address is required";
+  if (isNetwork && !formdata.port) newErrors.port = "Port is required";
   if (!formdata.kitchen_id) newErrors.kitchen_id = "Kitchen is required";
 
   setErrors(newErrors);
 
-  // Stop submission if there are errors
   if (Object.keys(newErrors).length > 0) return;
 
   const data = {
     printer_name: formdata.printer_name,
     printer_type: formdata.printer_type,
-    printer_path: formdata.printer_path,
+    printer_path: isNetwork ? formdata.printer_path : formdata.printer_name,
+    port: isNetwork ? formdata.port : null,
     kitchen_id: formdata.kitchen_id,
   };
 
@@ -472,6 +476,7 @@ const handleSubmit2 = (e) => {
     setItemsPerPage(Number(e.target.value));
     setCurrentPage(1); // Reset to first page when items per page changes
   };
+  if (!canDo('printers', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div">
@@ -507,6 +512,7 @@ const handleSubmit2 = (e) => {
             <div className=" flex justify-between">
               <span></span>
 
+              {canDo('printers', 'can_create') && (
               <HasPermission module="Printers" action="create">
                 <button
                   onClick={() => {
@@ -519,6 +525,7 @@ const handleSubmit2 = (e) => {
                   Add Printer
                 </button>
               </HasPermission>
+              )}
             </div>
 
             {/* Search Bar */}
@@ -558,6 +565,7 @@ const handleSubmit2 = (e) => {
                     <h1 className="">Records per page</h1>
                   </div>
 
+                  {canDo('printers', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -581,6 +589,7 @@ const handleSubmit2 = (e) => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4  rounded-md border-[1px]   border-gray-900">
                     <button className="px-4 text-[#0f044a] text-sm">
@@ -642,6 +651,7 @@ const handleSubmit2 = (e) => {
 
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
+                                  {canDo('printers', 'can_edit') && (
                                   <HasPermission
                                     module="Printers"
                                     action="edit"
@@ -655,6 +665,8 @@ const handleSubmit2 = (e) => {
                                       </button>
                                     </Tooltip>
                                   </HasPermission>
+                                  )}
+                                  {canDo('printers', 'can_delete') && (
                                   <HasPermission
                                     module="Printers"
                                     action="delete"
@@ -670,6 +682,7 @@ const handleSubmit2 = (e) => {
                                       </button>
                                     </Tooltip>
                                   </HasPermission>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -860,10 +873,10 @@ const handleSubmit2 = (e) => {
         type="text"
         id="printer_name"
         name="printer_name"
-        placeholder="Enter Printer Name"
+        placeholder="e.g. Kitchen Printer 1"
         value={formdata.printer_name}
         onChange={handleChange}
-        className={`shadow border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline 
+        className={`shadow border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline
           ${errors.printer_name ? "border-red-500" : "border-[#4CBBA1]"}`}
       />
       {errors.printer_name && (
@@ -874,7 +887,7 @@ const handleSubmit2 = (e) => {
     {/* Printer Type */}
     <div className="mb-6 flex flex-col">
       <label className="mb-2 text-gray-700 font-semibold" htmlFor="printer_type">
-        Printer Type*
+        Connection Type*
       </label>
       <select
         id="printer_type"
@@ -884,9 +897,8 @@ const handleSubmit2 = (e) => {
         className={`shadow border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline
           ${errors.printer_type ? "border-red-500" : "border-[#4CBBA1]"}`}
       >
-        <option value="">Select Printer Type*</option>
-        <option value="usb">USB</option>
-        <option value="network">Network</option>
+        <option value="">Select Connection Type</option>
+        <option value="network">Network (LAN / Static IP)</option>
         <option value="windows">Windows (Driver-based)</option>
       </select>
       {errors.printer_type && (
@@ -894,25 +906,49 @@ const handleSubmit2 = (e) => {
       )}
     </div>
 
-    {/* Printer Path */}
-    <div className="mb-6 flex flex-col">
-      <label className="mb-2 text-gray-700 font-semibold" htmlFor="printer_path">
-        Printer Path*
-      </label>
-      <input
-        type="text"
-        id="printer_path"
-        name="printer_path"
-        placeholder="Enter Printer Path"
-        value={formdata.printer_path}
-        onChange={handleChange}
-        className={`shadow border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline
-          ${errors.printer_path ? "border-red-500" : "border-[#4CBBA1]"}`}
-      />
-      {errors.printer_path && (
-        <p className="text-red-500 text-sm mt-1">{errors.printer_path}</p>
-      )}
-    </div>
+    {/* Static IP Address — only for network */}
+    {formdata.printer_type === "network" && (
+      <div className="mb-6 flex flex-col">
+        <label className="mb-2 text-gray-700 font-semibold" htmlFor="printer_path">
+          Static IP Address*
+        </label>
+        <input
+          type="text"
+          id="printer_path"
+          name="printer_path"
+          placeholder="e.g. 192.168.1.100"
+          value={formdata.printer_path}
+          onChange={handleChange}
+          className={`shadow border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline
+            ${errors.printer_path ? "border-red-500" : "border-[#4CBBA1]"}`}
+        />
+        {errors.printer_path && (
+          <p className="text-red-500 text-sm mt-1">{errors.printer_path}</p>
+        )}
+      </div>
+    )}
+
+    {/* Port — only for network */}
+    {formdata.printer_type === "network" && (
+      <div className="mb-6 flex flex-col">
+        <label className="mb-2 text-gray-700 font-semibold" htmlFor="port">
+          Port*
+        </label>
+        <input
+          type="number"
+          id="port"
+          name="port"
+          placeholder="e.g. 9100 (default for thermal printers)"
+          value={formdata.port}
+          onChange={handleChange}
+          className={`shadow border rounded py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline
+            ${errors.port ? "border-red-500" : "border-[#4CBBA1]"}`}
+        />
+        {errors.port && (
+          <p className="text-red-500 text-sm mt-1">{errors.port}</p>
+        )}
+      </div>
+    )}
 
     {/* Kitchen Select */}
     <div className="mb-6 flex flex-col">

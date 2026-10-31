@@ -35,6 +35,7 @@ const SaleReport = () => {
   const [saleData, setSaleData] = useState([]);
   const token = localStorage.getItem("token");
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const getSaledata = () => {
     axios
       .get(`${API_BASE_URL}/salesbyreport`, {
@@ -241,6 +242,7 @@ const SaleReport = () => {
     doc.save("data.pdf"); // PDF file name
   };
 
+  if (!canDo('sale_report', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -312,6 +314,7 @@ const SaleReport = () => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('sale_report', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -335,6 +338,7 @@ const SaleReport = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                 </div>
               </section>
             </div>

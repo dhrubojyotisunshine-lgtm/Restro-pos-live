@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import CategoryDialogBox from "../../components/CategoryDialogBox";
@@ -13,7 +13,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import DeleteDialogBox from "../../components/DeleteDialogBox";
 import HasPermission from "../../store/HasPermission";
-
+import { AuthContext } from "../../store/AuthContext";
 import useFullScreen from "../../components/useFullScreen";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
@@ -44,6 +44,7 @@ const KitchenList = () => {
   };
 
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -348,6 +349,7 @@ const KitchenList = () => {
     </div>
   );
 
+  if (!canDo('kitchen_list', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div">
@@ -380,6 +382,7 @@ const KitchenList = () => {
             </div>
             <div className="flex justify-between mt-11">
               <span></span>
+              {canDo('kitchen_list', 'can_create') && (
               <HasPermission module="Kitchen List" action="create">
                 <button
                   onClick={openModal}
@@ -389,6 +392,7 @@ const KitchenList = () => {
                   Add Kitchen
                 </button>
               </HasPermission>
+              )}
             </div>
 
             {/* Search Bar */}
@@ -428,6 +432,7 @@ const KitchenList = () => {
                     <h1 className="">Records per page</h1>
                   </div>
 
+                  {canDo('kitchen_list', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -451,6 +456,7 @@ const KitchenList = () => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4  rounded-md border-[1px]   border-gray-900">
                     <button className="px-4 text-[#0f044a] text-sm">
@@ -501,6 +507,7 @@ const KitchenList = () => {
 
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
+                                  {canDo('kitchen_list', 'can_edit') && (
                                   <HasPermission
                                     module="Kitchen List"
                                     action="edit"
@@ -514,6 +521,8 @@ const KitchenList = () => {
                                       </button>
                                     </Tooltip>
                                   </HasPermission>
+                                  )}
+                                  {canDo('kitchen_list', 'can_delete') && (
                                   <HasPermission
                                     module="Kitchen List"
                                     action="delete"
@@ -529,6 +538,7 @@ const KitchenList = () => {
                                       </button>
                                     </Tooltip>
                                   </HasPermission>
+                                  )}
                                 </div>
                               </td>
                             </tr>

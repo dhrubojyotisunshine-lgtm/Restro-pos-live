@@ -37,6 +37,7 @@ const Tooltip = ({ message, children }) => {
 const CashRegisterReport = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const token = localStorage.getItem("token");
   const [isOpen, setOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -350,6 +351,7 @@ const[userid,setUserId]=useState()
 
 
 
+  if (!canDo('cash_register_report', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -419,6 +421,7 @@ const[userid,setUserId]=useState()
 
 
 
+                  {canDo('cash_register_report', 'can_export') && (
                   <div className=" sm:w-auto justify-evenly flex gap-x-4 ">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -442,6 +445,7 @@ const[userid,setUserId]=useState()
                       PDF
                     </button>
                   </div>
+                  )}
 
                    <div className=" flex items-center justify-center  px-4 rounded-md  border-[0.5px] border-gray-900">
                   <button className="px-4 text-[#0f044a] text-sm">

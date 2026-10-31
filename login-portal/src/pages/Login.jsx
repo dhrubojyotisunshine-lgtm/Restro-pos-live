@@ -56,7 +56,7 @@ const Login = () => {
       toast.success(`Log-In successful, Welcome ${username}!`);
 
       if (superAdmin && websitelink) {
-        window.location.href = websitelink;
+        window.location.href = `${websitelink}?token=${token}&superAdmin=true&username=${encodeURIComponent(username)}&userId=${userId}`;
       } else {
         window.location.href = APP_URL;
       }
@@ -127,6 +127,7 @@ const Login = () => {
               placeholder="********"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !isLoading && handleLogin()}
               disabled={isLoading}
             />
             <button

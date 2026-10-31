@@ -1,0 +1,6 @@
+Category_Name,Menu_Type,Product_Name,Description,VAT,Status,Variant_Name,Price
+Fast Food,Lunch,Burger,Classic beef burger,5,1,Regular,120
+Fast Food,Lunch,Burger,Classic beef burger,5,1,Large,150
+Beverages,Breakfast,Lemon Tea,Fresh lemon tea,0,1,Small,40
+Beverages,Breakfast,Lemon Tea,Fresh lemon tea,0,1,Large,70
+Desserts,Dinner,Ice Cream,Vanilla ice cream,0,1,Single Scoop,60

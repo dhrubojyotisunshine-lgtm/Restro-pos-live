@@ -52,6 +52,7 @@ const ReturnInvoice = () => {
   const [viewDataModal, setvieweDataModal] = useState(false);
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
   const getReturnData = () => {
     axios
@@ -262,11 +263,7 @@ const ReturnInvoice = () => {
 
             <div className=" flex justify-between mt-11">
               <span></span>
-              <HasPermission
-                                    module="Return Invoice"
-                                    action="create"
-                                  >
-
+              {canDo('return_invoice', 'can_create') && (
               <button
                 onClick={() => {
                   navigate("/purchase-return");
@@ -277,7 +274,7 @@ const ReturnInvoice = () => {
                 <IoIosAddCircleOutline className=" font-semibold text-lg" />
                 Add Purchase Return
               </button>
-              </HasPermission>
+              )}
             </div>
             {/* Search Bar */}
             <div className=" mt-11  w-full">
@@ -316,6 +313,7 @@ const ReturnInvoice = () => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('return_invoice', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -339,6 +337,7 @@ const ReturnInvoice = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                   <div className="flex m-auto px-4 rounded-md border-[1px]  border-gray-900">
                     <input
                       value={searchName}
@@ -405,10 +404,7 @@ const ReturnInvoice = () => {
                               </td>
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center font-bold">
-                                  <HasPermission
-                                    module="Return Invoice"
-                                    action="access"
-                                  >
+                                  {canDo('return_invoice', 'can_print') && (
                                     <Tooltip message="check">
                                       <button
                                         onClick={() =>
@@ -419,7 +415,7 @@ const ReturnInvoice = () => {
                                         <FaRegEye />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
+                                  )}
                                 </div>
                               </td>
                             </tr>

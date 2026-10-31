@@ -48,6 +48,7 @@ const CompleteOrder = () => {
 
   const token = localStorage.getItem("token");
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const ActionButtion = [
     { btn: "Copy" },
     { btn: "CSV" },
@@ -405,6 +406,7 @@ const getcompleteorder = () => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('complete_order', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -428,6 +430,7 @@ const getcompleteorder = () => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -516,36 +519,28 @@ const getcompleteorder = () => {
 
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className=" flex gap-x-2  font-bold ">
-                                <HasPermission
-                                    module="Complete Order"
-                                    action="access"
-                                  >
-                                     <Tooltip message="Invoice">
-                                    {" "}
-                                    <button
-                                     onClick={() => {
-                                      showInvoiceData(row.order_id);
-                                    }}
-                                     className=" bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105">
+                                  {canDo('complete_order', 'can_manage') && (
+                                    <Tooltip message="Invoice">
+                                      {" "}
+                                      <button
+                                        onClick={() => {
+                                          showInvoiceData(row.order_id);
+                                        }}
+                                        className=" bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105">
                                         <FaRegEye />
-                                    </button>
-                                  </Tooltip>
-                                     </HasPermission>
-                                 
-                                     <HasPermission
-                                    module="Complete Order"
-                                    action="access"
-                                  >
-                                  <Tooltip message="print">
-                                    {" "}
-                                    <button
-                                      onClick={() => showBillDetails(row.order_id)}
-                                    className=" bg-[#1C1D3E] p-1 rounded-sm  text-white hover:scale-105">
-                                    
-                                      <IoDocumentTextOutline />
-                                    </button>
-                                  </Tooltip>
-                                  </HasPermission>
+                                      </button>
+                                    </Tooltip>
+                                  )}
+                                  {canDo('complete_order', 'can_print') && (
+                                    <Tooltip message="print">
+                                      {" "}
+                                      <button
+                                        onClick={() => showBillDetails(row.order_id)}
+                                        className=" bg-[#1C1D3E] p-1 rounded-sm  text-white hover:scale-105">
+                                        <IoDocumentTextOutline />
+                                      </button>
+                                    </Tooltip>
+                                  )}
                                 </div>
                               </td>
                             </tr>

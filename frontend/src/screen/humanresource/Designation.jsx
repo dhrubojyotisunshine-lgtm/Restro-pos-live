@@ -37,6 +37,7 @@ const headers = ["SL.", "Position", "Details", "Action"];
 const Designation = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const [isOpen, setOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [position, setPosition] = useState([]);
@@ -348,6 +349,7 @@ const handleSubmit2 = (e) => {
     getPositions();
   }, []);
 
+  if (!canDo('designation', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -371,6 +373,7 @@ const handleSubmit2 = (e) => {
             </div>
             <div className=" flex justify-between">
               <span></span>
+              {canDo('designation', 'can_create') && (
               <HasPermission module="Designation" action="create">
                 <button
                   onClick={() => {
@@ -383,6 +386,7 @@ const handleSubmit2 = (e) => {
                   Add Position
                 </button>
               </HasPermission>
+              )}
             </div>
 
             {/* Search Bar */}
@@ -422,6 +426,7 @@ const handleSubmit2 = (e) => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('designation', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                       <button
                         onClick={() => handleDownload("csv")}
@@ -445,6 +450,7 @@ const handleSubmit2 = (e) => {
                         PDF
                       </button>
                     </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -506,6 +512,7 @@ const handleSubmit2 = (e) => {
 
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
+                                {canDo('designation', 'can_edit') && (
                                 <HasPermission
                                   module="Department"
                                   action="edit"
@@ -521,6 +528,8 @@ const handleSubmit2 = (e) => {
                                     </button>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
+                                {canDo('designation', 'can_delete') && (
                                 <HasPermission
                                   module="Department"
                                   action="delete"
@@ -538,6 +547,7 @@ const handleSubmit2 = (e) => {
                                     </div>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
                               </div>
                             </td>
                           </tr>

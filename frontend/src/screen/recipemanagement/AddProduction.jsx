@@ -41,6 +41,7 @@ const AddProduction = () => {
   const [itemsPerPage, setItemsPerPage] = useState(10);
   const [productionData, setProductionData] = useState([]);
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
  const [errors, setErrors] = useState({});
   const getFoodData = () => {
@@ -459,14 +460,16 @@ const handleSubmit = async (e) => {
 
   {/* Submit */}
   <div className="col-span-1 flex items-end">
-    <HasPermission module="Add Production" action="create">
-      <button
-        type="submit"
-        className="w-[168px] h-[46px] bg-[#1C1D3E] text-white p-2 rounded"
-      >
-        Submit
-      </button>
-    </HasPermission>
+    {canDo('add_production', 'can_create') && (
+      <HasPermission module="Add Production" action="create">
+        <button
+          type="submit"
+          className="w-[168px] h-[46px] bg-[#1C1D3E] text-white p-2 rounded"
+        >
+          Submit
+        </button>
+      </HasPermission>
+    )}
   </div>
 </form>
 
@@ -511,6 +514,7 @@ const handleSubmit = async (e) => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('add_production', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -534,6 +538,7 @@ const handleSubmit = async (e) => {
                       PDF
                     </button>
                   </div>
+                  )}
                   <div className="flex m-auto px-4 rounded-md border-[1px]  border-gray-900">
                     <input
                       value={searchName}

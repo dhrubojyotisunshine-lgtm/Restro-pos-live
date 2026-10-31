@@ -39,6 +39,7 @@ const Tooltip = ({ message, children }) => {
 
 const OrdersList = () => {
   const navigate = useNavigate();
+  const { canDo } = useContext(AuthContext);
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const [isOpen, setOpen] = useState(true);
   const [orderListData, setOrderListData] = useState([]);
@@ -571,6 +572,7 @@ const OrdersList = () => {
                     <h1 className="">Records per page</h1>
                   </div>
 
+                  {canDo('order_list', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -594,6 +596,7 @@ const OrdersList = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                 </div>
               </section>
             </div>
@@ -786,7 +789,7 @@ const OrdersList = () => {
 
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex gap-x-2 font-bold">
-                                  {row.bill_status !== 1 &&
+                                  {canDo('order_list', 'can_edit') && row.bill_status !== 1 &&
                                     row.order_status !== 5 && (
                                       <Tooltip message="Edit">
                                         <button
@@ -799,87 +802,46 @@ const OrdersList = () => {
                                         </button>
                                       </Tooltip>
                                     )}
-                                  <HasPermission
-                                    module="Order List"
-                                    action="access"
-                                  >
+                                  {canDo('order_list', 'can_print') && (
                                     <Tooltip message="print">
                                       <button
-                                        onClick={() => {
-                                          showBillDetails(row.order_id);
-                                        }}
+                                        onClick={() => showBillDetails(row.order_id)}
                                         className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
                                       >
                                         <IoDocumentTextOutline />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
-                                  <HasPermission
-                                    module="Order List"
-                                    action="access"
-                                  >
-                                    {row.bill_status === 0 &&
-                                      row.status === "completed" && (
-                                        <Tooltip message="Payment">
-                                          <button
-                                            onClick={() =>
-                                              showPaynment(row.order_id)
-                                            }
-                                            className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
-                                          >
-                                            <IoWalletOutline />
-                                          </button>
-                                        </Tooltip>
-                                      )}
-                                  </HasPermission>
-                                  <HasPermission
-                                    module="Order List"
-                                    action="access"
-                                  >
-                                    <Tooltip
-                                      message={
-                                        row.status === "completed"
-                                          ? "View Invoice"
-                                          : "Invoice available after order complete"
-                                      }
-                                    >
+                                  )}
+                                  {canDo('order_list', 'can_manage') && row.bill_status === 0 && row.status === "completed" && (
+                                    <Tooltip message="Payment">
                                       <button
-                                        disabled={
-                                          row.order_status === "completed"
-                                        }
-                                        onClick={() =>
-                                          row.status === "completed" &&
-                                          showInvoiceData(row.order_id)
-                                        }
-                                        className={`p-1 rounded-sm text-white hover:scale-105 ${
-                                          row.status === "completed"
-                                            ? "bg-[#1C1D3E] cursor-pointer"
-                                            : "bg-gray-400 cursor-not-allowed"
-                                        }`}
+                                        onClick={() => showPaynment(row.order_id)}
+                                        className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
+                                      >
+                                        <IoWalletOutline />
+                                      </button>
+                                    </Tooltip>
+                                  )}
+                                  {canDo('order_list', 'can_manage') && (
+                                    <Tooltip message={row.status === "completed" ? "View Invoice" : "Invoice available after order complete"}>
+                                      <button
+                                        onClick={() => row.status === "completed" && showInvoiceData(row.order_id)}
+                                        className={`p-1 rounded-sm text-white hover:scale-105 ${row.status === "completed" ? "bg-[#1C1D3E] cursor-pointer" : "bg-gray-400 cursor-not-allowed"}`}
                                       >
                                         <FaRegEye />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
-
-                                  <HasPermission
-                                    module="Order List"
-                                    action="delete"
-                                  >
-                                    {row.bill_status !== 1 &&
-                                      row.order_status !== 5 && (
-                                        <Tooltip message="Cancel Order">
-                                          <button
-                                            onClick={() => {
-                                              deleteOrder(row.order_id);
-                                            }}
-                                            className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
-                                          >
-                                            <FaRegTrashCan />
-                                          </button>
-                                        </Tooltip>
-                                      )}
-                                  </HasPermission>
+                                  )}
+                                  {canDo('order_list', 'can_delete') && row.bill_status !== 1 && row.order_status !== 5 && (
+                                    <Tooltip message="Cancel Order">
+                                      <button
+                                        onClick={() => deleteOrder(row.order_id)}
+                                        className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
+                                      >
+                                        <FaRegTrashCan />
+                                      </button>
+                                    </Tooltip>
+                                  )}
                                 </div>
                               </td>
                             </tr>

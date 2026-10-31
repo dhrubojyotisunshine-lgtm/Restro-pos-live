@@ -24,7 +24,7 @@ const headers = [
 const MySubscription = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const { isFullScreen, toggleFullScreen } = useFullScreen();
-  const { userId } = useContext(AuthContext);
+  const { userId, canDo } = useContext(AuthContext);
   const token = localStorage.getItem("token");
   const [isOpen, setOpen] = useState(true);
   const [plans, setPlans] = useState([]);
@@ -110,6 +110,8 @@ const MySubscription = () => {
     getSubscription();
   }, []);
 
+  if (!canDo('my_subscription', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
+
   return (
     <div className="main_div">
       <section className="side_section flex">
@@ -146,15 +148,33 @@ const MySubscription = () => {
                 <div className="font-semibold text-2xl mb-2">
                   Subscription Plan Details
                 </div>
-                {subscription.some(s => s.end_date && new Date(s.end_date) < new Date()) ? (
-                  <div className="bg-red-100 text-red-800 p-4 rounded mb-4 font-semibold">
-                    ⚠️ Some of your subscriptions have expired!
-                  </div>
-                ) : subscription.some(s => s.end_date && new Date(s.end_date) <= new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)) ? (
-                  <div className="bg-red-100 text-red-800 p-4 rounded mb-4 font-semibold">
-                    ⚠️ Some of your subscriptions are about to expire soon!
-                  </div>
-                ) : null}
+                {(() => {
+                  const now = new Date();
+                  const activePlan = subscription.find(
+                    s => s.package_status === 'approved' && s.end_date && new Date(s.end_date) >= now
+                  );
+                  const expiringSoon = activePlan && new Date(activePlan.end_date) <= new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+
+                  if (activePlan && !expiringSoon) {
+                    return (
+                      <div className="bg-green-100 text-green-800 p-4 rounded mb-4 font-semibold">
+                        ✅ Your subscription is active.
+                      </div>
+                    );
+                  } else if (activePlan && expiringSoon) {
+                    return (
+                      <div className="bg-yellow-100 text-yellow-800 p-4 rounded mb-4 font-semibold">
+                        ⚠️ Your subscription is about to expire soon!
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="bg-red-100 text-red-800 p-4 rounded mb-4 font-semibold">
+                        ⚠️ Your subscription has expired. Please renew your plan.
+                      </div>
+                    );
+                  }
+                })()}
 
                 <div className="overflow-hidden shadow-lg rounded-lg border border-gray-200 bg-white">
                   <div className="w-full overflow-x-auto hide-scrollbar">
@@ -250,7 +270,7 @@ const MySubscription = () => {
                                   </span>
                                 </td>
                                 <td className="py-3 px-6">
-                                  {isLatestPending && (
+                                  {isLatestPending && canDo('my_subscription', 'can_manage') && (
                                     <button
                                       onClick={() => openRenewConfirm(row.user_plan_id)}
                                       className="bg-teal-500 hover:bg-teal-600 text-white px-3 py-1 rounded text-sm font-semibold"
@@ -343,12 +363,14 @@ const MySubscription = () => {
                         </ul>
 
                         <div className="mt-6 flex flex-col sm:flex-row gap-2">
+                          {canDo('my_subscription', 'can_manage') && (
                           <button
                             onClick={() => openModal(plan.plan_id)}
                             className="w-full px-4 py-2 border border-gray-900 text-gray-900 rounded-md flex items-center justify-center gap-1 text-base font-bold bg-[#4CBBA1]"
                           >
                             Buy Now
                           </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -418,12 +440,14 @@ const MySubscription = () => {
                       </button>
                     </div>
 
+                    {canDo('my_subscription', 'can_manage') && (
                     <button
                       onClick={handleModalBuy}
                       className="w-full mt-6 px-4 py-3 bg-[#4CBBA1] text-white font-bold rounded-2xl hover:bg-[#3ca38f] transition-colors"
                     >
                       Buy Now
                     </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -447,12 +471,14 @@ const MySubscription = () => {
                       >
                         Cancel
                       </button>
+                      {canDo('my_subscription', 'can_manage') && (
                       <button
                         onClick={handleRenewConfirm}
                         className="flex-1 px-4 py-2 bg-teal-500 hover:bg-teal-600 text-white font-bold rounded-lg"
                       >
                         Yes, Request Renewal
                       </button>
+                      )}
                     </div>
                   </div>
                 </div>

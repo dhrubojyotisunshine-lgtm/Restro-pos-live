@@ -323,9 +323,14 @@ const draftOrderPlace = (req, res) => {
   const waiterId = waiter_id || 0;
   const tableId = table_id || 0;
  
+  // Resolve company owner ID for per-company invoice sequencing
+  db.pool.query("SELECT is_admin, created_by FROM user WHERE id = ?", [create_by], (err, creatorRows) => {
+    if (err) { console.error("Error resolving creator:", err); return res.status(500).json({ message: "Internal server error" }); }
+    const creatorId = (creatorRows[0]?.is_admin === 1) ? create_by : (creatorRows[0]?.created_by || create_by);
+
   // Get the max order ID per company
   const maxOrderIdQuery = "SELECT MAX(CAST(saleinvoice AS UNSIGNED)) AS maxOrderId FROM customer_order WHERE created_by = ?";
-  db.pool.query(maxOrderIdQuery, [create_by], (err, result) => {
+  db.pool.query(maxOrderIdQuery, [creatorId], (err, result) => {
     if (err) {
       console.error("Error getting max order ID:", err);
       return res.status(500).json({ message: "Internal server error" });
@@ -344,7 +349,7 @@ const draftOrderPlace = (req, res) => {
     `;
     db.pool.query(
       orderQuery,
-      [invoiceId, customer_id, customer_type, isthirdparty, waiterId, tableId, grand_total,create_by],
+      [invoiceId, customer_id, customer_type, isthirdparty, waiterId, tableId, grand_total, creatorId],
       (err, result) => {
         if (err) {
           console.error("Error inserting order:", err);
@@ -626,6 +631,7 @@ const draftOrderPlace = (req, res) => {
       }
     );
   });
+  }); // closes creatorRows callback
 };
 
  const updateOrder = async (req, res) => {
@@ -686,7 +692,14 @@ const draftOrderPlace = (req, res) => {
           "SELECT COUNT(*) AS invoice_count FROM customer_order WHERE created_by = ? AND order_status NOT IN (5, 6)",
           [creatorId]
         );
-        const currentCount = countRows[0]?.invoice_count || 0;
+        const mainCount = countRows[0]?.invoice_count || 0;
+        const electronRows = await dbQuery(
+          "SELECT electron_order_count FROM restaurant_settings WHERE user_id = ? LIMIT 1",
+          [creatorId]
+        );
+        const electronCount = electronRows[0]?.electron_order_count || 0;
+        const currentCount = mainCount + electronCount;
+        console.log("[InvoiceLimit][Main] main:", mainCount, "| electron:", electronCount, "| total:", currentCount, "| limit:", invoiceLimit);
         if (currentCount >= invoiceLimit) {
           return res.status(403).json({
             success: false,

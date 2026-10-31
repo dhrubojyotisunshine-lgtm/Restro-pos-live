@@ -22,6 +22,7 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
   const [selectedInvoice, setSelectedInvoice] = useState(""); // Selected invoice
   const [returnData, setReturnData] = useState([]);
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const navigate = useNavigate();
 
   const fetchSuppliers = async () => {
@@ -281,14 +282,14 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
 p-5"
                 >
                   <span></span>{" "}
-                  <HasPermission module="Purchase Return" action="create">
+                  {canDo('purchase_return', 'can_create') && (
                     <button
                       onClick={handleSubmit}
                       className="bg-[#1C1D3E] p-2 rounded-md text-white mt-9 hover:scale-105"
                     >
                       Return
                     </button>
-                  </HasPermission>
+                  )}
                 </div>
               </div>
               <h1 className="font-bold mt-5 mb-4 pr-3 text-right w-full">

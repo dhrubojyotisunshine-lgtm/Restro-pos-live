@@ -46,6 +46,7 @@ const MakingFoodwaste = () => {
   const [selectedVariant, setSelectedVariant] = useState(""); // Selected variant
   // lost price set
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const [itemLostprice, setItemLostprice] = useState("");
   // items
 
@@ -474,6 +475,8 @@ const MakingFoodwaste = () => {
     getFoodData();
   }, []);
 
+  if (!canDo('makingfood_waste', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
+
   return (
     <>
       <div className="main_div ">
@@ -613,6 +616,7 @@ const MakingFoodwaste = () => {
                           className="border-[1px] border-[#4CBBA1] p-2 rounded"
                         />
 
+                        {canDo('makingfood_waste', 'can_create') && (
                         <div className="cursor-pointer flex justify-center p-4 items-center gap-x-2 text-white font-normal bg-[#FB3F3F] rounded">
                           <FaRegTrashCan />
                           <button
@@ -622,9 +626,11 @@ const MakingFoodwaste = () => {
                             Delete
                           </button>
                         </div>
+                        )}
                       </div>
                     ))}
 
+                    {canDo('makingfood_waste', 'can_create') && (
                     <button
                       type="button"
                       onClick={handleAddItem}
@@ -632,7 +638,9 @@ const MakingFoodwaste = () => {
                     >
                       Add More Item
                     </button>
+                    )}
                   </div>
+                  {canDo('makingfood_waste', 'can_create') && (
                   <HasPermission module="Making Food Waste" action="create">
                     <button
                       type="submit"
@@ -641,6 +649,7 @@ const MakingFoodwaste = () => {
                       Submit
                     </button>
                   </HasPermission>
+                  )}
                 </form>
               </div>
             </div>
@@ -682,6 +691,7 @@ const MakingFoodwaste = () => {
                     </div>
                     <h1>Records per page</h1>
                   </div>
+                  {canDo('makingfood_waste', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -705,6 +715,7 @@ const MakingFoodwaste = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                 </div>
               </section>
             </div>

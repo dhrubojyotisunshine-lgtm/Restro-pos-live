@@ -55,6 +55,7 @@ const token = localStorage.getItem("token");
   const [searchName, setSearchName] = useState("");
 
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const totalPages = Math.ceil(IngredientData.length / itemsPerPage);
 
   const selectPage = (page) => {
@@ -331,6 +332,7 @@ const handleSearch = (e) => {
     getShippingType();
   }, []);
 
+  if (!canDo('shipping_type', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -359,6 +361,7 @@ const handleSearch = (e) => {
 
             <div className="flex justify-between mt-11">
               <span></span>
+              {canDo('shipping_type', 'can_create') && (
               <HasPermission module="Shipping Type" action="create">
                 <button
                   onClick={() => setIngredientModal(true)}
@@ -368,6 +371,7 @@ const handleSearch = (e) => {
                   Add Shipping Type
                 </button>
               </HasPermission>
+              )}
             </div>
             {/* Search Bar */}
 
@@ -407,6 +411,7 @@ const handleSearch = (e) => {
                     <h1 className="">Records per page</h1>
                   </div>
 
+                  {canDo('shipping_type', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -430,6 +435,7 @@ const handleSearch = (e) => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4  rounded-md border-[1px]   border-gray-900">
                     <button className="px-4 text-[#0f044a] text-sm">
@@ -485,6 +491,7 @@ const handleSearch = (e) => {
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
                                 {/* Tooltip for Edit Button */}
+                                {canDo('shipping_type', 'can_edit') && (
                                 <HasPermission
                                   module="Shipping Type"
                                   action="edit"
@@ -498,6 +505,8 @@ const handleSearch = (e) => {
                                     </button>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
+                                {canDo('shipping_type', 'can_delete') && (
                                 <HasPermission
                                   module="Shipping Type"
                                   action="delete"
@@ -513,6 +522,7 @@ const handleSearch = (e) => {
                                     </button>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
                               </div>
                             </td>
                           </tr>

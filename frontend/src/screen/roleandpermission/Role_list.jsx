@@ -16,12 +16,12 @@ import useFullScreen from "../../components/useFullScreen";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import EditRole_Page from "./EditRole_Page";
-import HasPermission from "../../store/HasPermission";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import { AuthContext } from "../../store/AuthContext";
+import HasPermission from "../../store/HasPermission";
  
 const headers = ["SL.", "Role Name", "Description", "Status", "Action"];
 
@@ -47,6 +47,7 @@ const Role_list = () => {
   const [searchName, setSearchName] = useState("");
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
   const getReturnData = () => {
     axios
@@ -295,8 +296,9 @@ const handleEditClick = (id) => {
 
             <div className=" flex justify-between mt-11">
               <span></span>
-<HasPermission module="Role List" action="create">
-<button
+{canDo('role_list', 'can_create') && (
+              <HasPermission module="Role List" action="create">
+              <button
                 onClick={() => {
                   navigate("/add-role");
                 }}
@@ -306,7 +308,8 @@ const handleEditClick = (id) => {
                 <IoIosAddCircleOutline className=" font-semibold text-lg" />
                 Add Role
               </button>
-</HasPermission>
+              </HasPermission>
+              )}
              
             </div>
             {/* Search Bar */}
@@ -346,6 +349,7 @@ const handleEditClick = (id) => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('role_list', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -369,6 +373,7 @@ const handleEditClick = (id) => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]  gap-y-3 border-gray-900">
                     <input
@@ -431,7 +436,9 @@ const handleEditClick = (id) => {
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
 
-                                  <HasPermission module="Role List" action="edit"><Tooltip
+                                  {canDo('role_list', 'can_edit') && (
+                                  <HasPermission module="Role List" action="edit">
+                                  <Tooltip
                                     message="Edit Role"
                                     key={row.role_id}
                                   >
@@ -441,8 +448,12 @@ const handleEditClick = (id) => {
                                     >
                                       <FaRegEdit />
                                     </button>
-                                  </Tooltip></HasPermission>
-                                  <HasPermission  module="Role List" action="delete"> <Tooltip message="Delete Role">
+                                  </Tooltip>
+                                  </HasPermission>
+                                  )}
+                                  {canDo('role_list', 'can_delete') && (
+                                  <HasPermission module="Role List" action="delete">
+                                  <Tooltip message="Delete Role">
                                     <div>
                                       <button
                                         className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
@@ -453,7 +464,9 @@ const handleEditClick = (id) => {
                                         <FaRegTrashCan />
                                       </button>
                                     </div>
-                                  </Tooltip></HasPermission>
+                                  </Tooltip>
+                                  </HasPermission>
+                                  )}
                                   
                                  
                                  

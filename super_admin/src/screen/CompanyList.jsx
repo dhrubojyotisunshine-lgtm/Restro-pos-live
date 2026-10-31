@@ -18,6 +18,7 @@ import { FiCheckCircle } from "react-icons/fi";
 import Activate from "../components/Activate";
 import { MdManageAccounts } from "react-icons/md";
 import { MdAddToPhotos } from "react-icons/md";
+import { FaPuzzlePiece } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 
@@ -1039,6 +1040,19 @@ const CompanyList = () => {
                                   className="bg-purple-400 hover:bg-purple-500 text-white p-2 rounded-full transition duration-200"
                                 >
                                   <MdManageAccounts />
+                                </button>
+                              </Tooltip>
+
+                              <Tooltip message="Module Allocation">
+                                <button
+                                  onClick={() =>
+                                    navigate(
+                                      `/module-allocation/${row.user_id}?name=${encodeURIComponent(row.restaurant_name)}`
+                                    )
+                                  }
+                                  className="bg-[#4CBBA1] hover:bg-[#3aa08a] text-white p-2 rounded-full transition duration-200"
+                                >
+                                  <FaPuzzlePiece />
                                 </button>
                               </Tooltip>
 

@@ -462,6 +462,19 @@ const Home = () => {
           </div>
 
           <h1 className="mt-7 font-bold text-2xl">Welcome {username}</h1>
+          {subscriptionData?.expired === true && !showWarning && (
+            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 my-2 rounded flex justify-between items-center">
+              <div>
+                🚫 Dear <strong>{username}</strong>, your subscription has expired. Please renew your plan to continue.
+              </div>
+              <button
+                onClick={() => navigate("/my-subscription")}
+                className="ml-4 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded shadow"
+              >
+                Buy Plan
+              </button>
+            </div>
+          )}
           {showWarning && (
             <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 my-2 rounded flex justify-between items-center">
               <div>

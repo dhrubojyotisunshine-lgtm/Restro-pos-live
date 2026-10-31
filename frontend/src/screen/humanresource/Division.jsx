@@ -36,6 +36,7 @@ const Division = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const token = localStorage.getItem("token");
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const [searchName, setSearchName] = useState("");
   const [isOpen, setOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -344,6 +345,7 @@ const[createdby,setCreatesby]=useState("")
     departmentlist();
   }, []);
 
+  if (!canDo('division', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -366,6 +368,7 @@ const[createdby,setCreatesby]=useState("")
             </div>
             <div className=" flex justify-between">
               <span></span>
+              {canDo('division', 'can_create') && (
               <HasPermission module="Division" action="create">
               <button
                 onClick={() => {
@@ -378,6 +381,7 @@ const[createdby,setCreatesby]=useState("")
                 Add Division
               </button>
               </HasPermission>
+              )}
              
             </div>
             <div className=" mt-11  w-full">
@@ -416,6 +420,7 @@ const[createdby,setCreatesby]=useState("")
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('division', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -439,6 +444,7 @@ const[createdby,setCreatesby]=useState("")
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -490,6 +496,7 @@ const[createdby,setCreatesby]=useState("")
                             </td>
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
+                                {canDo('division', 'can_edit') && (
                                 <HasPermission module="Division" action="edit">
                                 <Tooltip message="Edit" key={row.division_id}>
                                   <button
@@ -502,6 +509,8 @@ const[createdby,setCreatesby]=useState("")
                                   </button>
                                 </Tooltip>
                                 </HasPermission>
+                                )}
+                                {canDo('division', 'can_delete') && (
                                 <HasPermission module="Division" action="delete">
                                 <Tooltip message="Delete">
                                   <button
@@ -514,6 +523,7 @@ const[createdby,setCreatesby]=useState("")
                                   </button>
                                 </Tooltip>
                                 </HasPermission>
+                                )}
                                
                                
                               </div>

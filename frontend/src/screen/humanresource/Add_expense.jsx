@@ -46,6 +46,7 @@ const token = localStorage.getItem("token");
   const [showModal, setShowModal] = useState(false);
   const [searchName, setSearchName] = useState("");
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const selectPage = (page) => {
     if (page > 0 && page <= Math.ceil(expense.length / itemsPerPage)) {
       setCurrentPage(page);
@@ -333,6 +334,7 @@ const downloadPDF = async () => {
     allPaynmnetMethod()
   }, []);
 
+  if (!canDo('add_expense', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -356,6 +358,7 @@ const downloadPDF = async () => {
             <div className=" flex justify-between">
               <span></span>
   
+              {canDo('add_expense', 'can_create') && (
               <HasPermission module="Add Expense" action="create">
               <button
                 onClick={() => {
@@ -368,6 +371,7 @@ const downloadPDF = async () => {
                 Add Expense Item
               </button>
               </HasPermission>
+              )}
               
             </div>
             <div className=" mt-11  w-full">
@@ -406,6 +410,7 @@ const downloadPDF = async () => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('add_expense', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                       <button
                         onClick={() => handleDownload("csv")}
@@ -429,6 +434,7 @@ const downloadPDF = async () => {
                         PDF
                       </button>
                     </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -502,6 +508,7 @@ const downloadPDF = async () => {
                                   </button>
                                 </Tooltip> */}
  
+                                {canDo('add_expense', 'can_delete') && (
                                 <HasPermission module="Add Expense" action="delete">
                                 <Tooltip message="Delete">
                                   <div>
@@ -514,6 +521,7 @@ const downloadPDF = async () => {
                                   </div>
                                 </Tooltip>
                                 </HasPermission>
+                                )}
                                
                               </div>
                             </td>

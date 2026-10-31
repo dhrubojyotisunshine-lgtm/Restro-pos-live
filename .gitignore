@@ -18,3 +18,8 @@ KOT-Printer-Agent/node_modules/
 
 # logs
 *.log
+
+# local backups / archives (not needed to run)
+*.zip
+server/server1/
+frontend/frontend/

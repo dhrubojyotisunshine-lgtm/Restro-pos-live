@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import * as XLSX from "xlsx";
@@ -89,6 +89,10 @@ const CategoryList = () => {
   const APP_URL = import.meta.env.VITE_APP_URL;
   const VITE_IMG_URL = import.meta.env.VITE_IMG_URL;
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
+  const importInputRef = useRef(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [data, setData] = useState([]);
   const [dataa, setDataa] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -379,6 +383,40 @@ const CategoryList = () => {
     }
   };
 
+  const processImportFile = async (file) => {
+    if (!file) return;
+    const ext = file.name.split(".").pop().toLowerCase();
+    let rows = [];
+    if (ext === "csv") {
+      await new Promise((resolve) => {
+        Papa.parse(file, { header: true, skipEmptyLines: true, complete: (r) => { rows = r.data; resolve(); } });
+      });
+    } else if (ext === "xlsx") {
+      const buffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const ws = workbook.worksheets[0];
+      const headers = ws.getRow(1).values.slice(1);
+      ws.eachRow((row, n) => {
+        if (n === 1) return;
+        const obj = {};
+        row.values.slice(1).forEach((v, i) => { obj[headers[i]] = v instanceof Date ? v.toISOString().split("T")[0] : v; });
+        rows.push(obj);
+      });
+    } else { toast.error("Only .csv or .xlsx files are supported"); return; }
+    if (!rows.length) { toast.error("No data found in file"); return; }
+    try {
+      const res = await axios.post(`${API_BASE_URL}categories/import`, { rows }, { headers: { Authorization: token } });
+      toast.success(`Imported: ${res.data.imported}, Skipped: ${res.data.skipped}`);
+      setShowImportModal(false);
+      fetchData();
+    } catch (err) { toast.error(err.response?.data?.message || "Import failed"); }
+  };
+  const handleImport = (e) => { processImportFile(e.target.files[0]); e.target.value = ""; };
+  const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); processImportFile(e.dataTransfer.files[0]); };
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
+
   const fetchDatas = async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/data`, {
@@ -523,15 +561,25 @@ const CategoryList = () => {
               {/* Action buttons container */}
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
                 {/* Add Category Button (conditionally rendered) */}
-                <HasPermission module="Category List" action="create">
-                  <button
-                    onClick={() => navigate("/add-category")}
-                    className="bg-[#4CBBA1] hover:bg-[#3CA991] text-white font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-2 transition-colors duration-300 transform hover:scale-105 w-full sm:w-auto mt-4 sm:mt-0"
-                  >
-                    <IoIosAddCircleOutline className="text-xl" />
-                    Add Category
-                  </button>
-                </HasPermission>
+                {canDo('category_list', 'can_create') && (
+                  <HasPermission module="Category List" action="create">
+                    <div className="flex gap-x-2">
+                      <button
+                        onClick={() => navigate("/add-category")}
+                        className="bg-[#4CBBA1] hover:bg-[#3CA991] text-white font-semibold px-4 py-2 rounded-md flex items-center justify-center gap-2 transition-colors duration-300 transform hover:scale-105 w-full sm:w-auto mt-4 sm:mt-0"
+                      >
+                        <IoIosAddCircleOutline className="text-xl" />
+                        Add Category
+                      </button>
+                      <button
+                        onClick={() => setShowImportModal(true)}
+                        className="bg-[#1C1D3E] text-white font-semibold px-4 py-2 rounded-md flex items-center justify-center transition-colors duration-300 hover:scale-105 w-full sm:w-auto mt-4 sm:mt-0"
+                      >
+                        Import
+                      </button>
+                    </div>
+                  </HasPermission>
+                )}
               </div>
             </div>
 
@@ -539,6 +587,7 @@ const CategoryList = () => {
             <div className=" mt-5  w-full">
               <section className=" tablebutton">
                 <div className="orderButton  flex justify-evenly flex-wrap gap-x-5 gap-y-5 ">
+                  {canDo('category_list', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -562,6 +611,7 @@ const CategoryList = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                   <div className="flex m-auto   px-4   rounded-md border-[1px] border-gray-900">
                     <button className="px-4 text-[#0f044a] text-sm">
                       <FaMagnifyingGlass />
@@ -622,43 +672,39 @@ const CategoryList = () => {
                             </td>
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
-                                <HasPermission
-                                  module="Category List"
-                                  action="edit"
-                                >
-                                  {" "}
-                                  <Tooltip
-                                    message="Edit Category"
-                                    key={row.CategoryID}
-                                  >
-                                    <button
-                                      onClick={() =>
-                                        handleEditClick(row.CategoryID)
-                                      }
-                                      className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
+                                {canDo('category_list', 'can_edit') && (
+                                  <HasPermission module="Category List" action="edit">
+                                    <Tooltip
+                                      message="Edit Category"
+                                      key={row.CategoryID}
                                     >
-                                      <FaRegEdit />
-                                    </button>
-                                  </Tooltip>
-                                </HasPermission>
-                                <HasPermission
-                                  module="Category List"
-                                  action="delete"
-                                >
-                                  {" "}
-                                  <Tooltip message="Delete Category">
-                                    <div>
                                       <button
-                                        className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
                                         onClick={() =>
-                                          handleDeleteClick(row.CategoryID)
+                                          handleEditClick(row.CategoryID)
                                         }
+                                        className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
                                       >
-                                        <FaRegTrashCan />
+                                        <FaRegEdit />
                                       </button>
-                                    </div>
-                                  </Tooltip>
-                                </HasPermission>
+                                    </Tooltip>
+                                  </HasPermission>
+                                )}
+                                {canDo('category_list', 'can_delete') && (
+                                  <HasPermission module="Category List" action="delete">
+                                    <Tooltip message="Delete Category">
+                                      <div>
+                                        <button
+                                          className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
+                                          onClick={() =>
+                                            handleDeleteClick(row.CategoryID)
+                                          }
+                                        >
+                                          <FaRegTrashCan />
+                                        </button>
+                                      </div>
+                                    </Tooltip>
+                                  </HasPermission>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1084,6 +1130,32 @@ const CategoryList = () => {
         onDelete={handleModalDelete}
         type={"Category"}
       />
+
+      <input ref={importInputRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={handleImport} />
+
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-lg w-[420px] p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold text-gray-800">Import Categories</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-white bg-red-500 rounded-sm w-7 h-7 flex items-center justify-center font-bold hover:bg-red-600">✕</button>
+            </div>
+            <div
+              onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+              onClick={() => importInputRef.current.click()}
+              className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${isDragging ? 'border-[#4CBBA1] bg-[#f0fdf9]' : 'border-gray-300 hover:border-[#4CBBA1]'}`}
+            >
+              <div className="text-4xl mb-3">📂</div>
+              <p className="text-gray-600 font-medium">Drag & Drop your file here</p>
+              <p className="text-gray-400 text-sm mt-1">or <span className="text-[#4CBBA1] underline">click to browse</span></p>
+              <p className="text-gray-400 text-xs mt-3">Supported formats: .csv, .xlsx</p>
+            </div>
+            <div className="mt-4 text-center">
+              <a href="/frontend/public/category_import_sample.csv" download className="text-sm text-[#4CBBA1] underline">Download Sample File</a>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

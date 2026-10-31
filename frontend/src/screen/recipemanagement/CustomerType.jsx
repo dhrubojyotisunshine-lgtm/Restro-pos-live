@@ -14,11 +14,13 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import useFullScreen from "../../components/useFullScreen";
+import { AuthContext } from "../../store/AuthContext";
 const headers = ["SL.", "Customer Type", "Customet Type Id"];
 
 const CustomerType = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const APP_URL = import.meta.env.VITE_APP_URL;
   const [isOpen, setOpen] = useState(true);
   const [customerType, setCustomerType] = useState([]);
@@ -230,6 +232,7 @@ autoTable(doc,{
                     <h1 className="">Records per page</h1>
                   </div>
 
+                  {canDo('customer_type', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -253,6 +256,7 @@ autoTable(doc,{
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4  rounded-md border-[1px]   border-gray-900">
                     <button className="px-4 text-[#0f044a] text-sm">

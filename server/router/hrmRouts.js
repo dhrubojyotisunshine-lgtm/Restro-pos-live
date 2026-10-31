@@ -22,6 +22,7 @@ const upload = multer({
 
 const hrmcontroller = require("../controllers/hrmController");
 router.get("/employedata", auth,hrmcontroller.getAllEmployeeHistories);
+router.post("/employees/import", auth, hrmcontroller.importEmployees);
 router.get("/designation", auth,hrmcontroller.getAllPositions);
 router.get("/designation/:id", auth, hrmcontroller.getPositionById );
 router.put("/designation/:id", auth, hrmcontroller.updatePosition );

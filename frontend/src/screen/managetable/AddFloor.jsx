@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import TableModal from "./TableModal";
 import { IoIosAddCircleOutline } from "react-icons/io";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { AuthContext } from "../../store/AuthContext";
 
 const AddFloor = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -17,6 +18,7 @@ const AddFloor = () => {
   const [file, setFile] = useState(null);
 
 const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const closeTableModal = () => {
     setIsTableModal(false);
   };
@@ -158,6 +160,7 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
             />
           </div>
 
+          {canDo('table_floor_manage', 'can_create') && (
           <div className="flex justify-end">
             <button
               type="submit"
@@ -166,6 +169,7 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
               Add Table
             </button>
           </div>
+          )}
         </form>
       </TableModal>
     </>

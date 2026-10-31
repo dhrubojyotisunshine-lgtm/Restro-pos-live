@@ -18,7 +18,7 @@ const SupplierLadger = () => {
   const [startData, setStartDate] = useState();
   const [endDate, setEndDate] = useState();
   const [ledgerData, setLedgerData] = useState([]);
-const {token}=useContext(AuthContext)
+const { token, canDo } = useContext(AuthContext)
   const { isFullScreen, toggleFullScreen } = useFullScreen();
   const fetchSuppliers = async () => {
     try {
@@ -146,7 +146,7 @@ const {token}=useContext(AuthContext)
 
                     <div className=" ml-[190px] flex gap-x-4">
                       <div>
-                      <HasPermission module="Supplier Ledger" action="access ">
+                      {canDo('supplier_ledger', 'can_view') && (
                         <button
                           type="button"
                           onClick={getLadgerData}
@@ -154,7 +154,7 @@ const {token}=useContext(AuthContext)
                         >
                           Generate
                         </button>
-                        </HasPermission>
+                      )}
                       </div>
 
                       {/* <div>

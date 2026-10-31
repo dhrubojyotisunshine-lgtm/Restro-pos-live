@@ -598,7 +598,11 @@ const createproduction = async (req, res) => {
       const existingRecords = await queryDb(checkQuery, [foodid, pvarientid]);
 
       if (existingRecords.length > 0) {
-        return res.status(400).json({ message: `Production details already exist for foodid ${foodid} and pvarientid ${pvarientid}` });
+        const foodRow = await queryDb("SELECT ProductName FROM item_foods WHERE ProductsID = ?", [foodid]);
+        const variantRow = await queryDb("SELECT variantName FROM variant WHERE variantid = ?", [pvarientid]);
+        const foodName = foodRow[0]?.ProductName || `Food #${foodid}`;
+        const variantName = variantRow[0]?.variantName || `Variant #${pvarientid}`;
+        return res.status(400).json({ success: false, message: `Production details for '${foodName} - ${variantName}' already exist. Please edit the existing record instead of creating a new one.` });
       }
 
       // Insert item details related to this food entry
@@ -1112,6 +1116,106 @@ const syncProduction = async (req, res) => {
   }
 };
 
+const importProductionSets = async (req, res) => {
+  try {
+    const user_id = req.id;
+    const rows = req.body.rows;
+
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ success: false, message: "No data provided" });
+    }
+
+    const [subResults] = await db.pool.promise().query(
+      "SELECT * FROM superadmin_user_plans WHERE user_id = ?", [user_id]
+    );
+
+    let creator_id;
+    if (subResults.length > 0) {
+      creator_id = user_id;
+    } else {
+      const [userData] = await db.pool.promise().query(
+        "SELECT created_by FROM user WHERE id = ?", [user_id]
+      );
+      if (userData.length === 0 || !userData[0].created_by) {
+        return res.status(403).json({ success: false, message: "Not authorized." });
+      }
+      const created_by = userData[0].created_by;
+      const [creatorSub] = await db.pool.promise().query(
+        "SELECT * FROM superadmin_user_plans WHERE user_id = ?", [created_by]
+      );
+      if (creatorSub.length === 0) {
+        return res.status(403).json({ success: false, message: "Creator does not have an active subscription." });
+      }
+      creator_id = created_by;
+    }
+
+    // Group rows by Food_Name + Variant_Name
+    const groups = {};
+    for (const row of rows) {
+      const key = `${(row.Food_Name || "").trim()}|||${(row.Variant_Name || "").trim()}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(row);
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const key of Object.keys(groups)) {
+      const groupRows = groups[key];
+      const food_name = (groupRows[0].Food_Name || "").trim();
+      const variant_name = (groupRows[0].Variant_Name || "").trim();
+
+      if (!food_name || !variant_name) { skipped += groupRows.length; continue; }
+
+      const [foodRows] = await db.pool.promise().query(
+        "SELECT ProductsID FROM item_foods WHERE ProductName = ? AND UserIDInserted = ?",
+        [food_name, creator_id]
+      );
+      if (foodRows.length === 0) { skipped += groupRows.length; continue; }
+      const foodid = foodRows[0].ProductsID;
+
+      const [variantRows] = await db.pool.promise().query(
+        "SELECT variantid FROM variant WHERE variantName = ? AND menuid = ?",
+        [variant_name, foodid]
+      );
+      if (variantRows.length === 0) { skipped += groupRows.length; continue; }
+      const pvarientid = variantRows[0].variantid;
+
+      const [existing] = await db.pool.promise().query(
+        "SELECT foodid FROM production_details WHERE foodid = ? AND pvarientid = ?",
+        [foodid, pvarientid]
+      );
+      if (existing.length > 0) { skipped += groupRows.length; continue; }
+
+      const newDate = new Date();
+      for (const row of groupRows) {
+        const ingredient_name = (row.Ingredient_Name || "").trim();
+        const qty = row.Quantity;
+
+        if (!ingredient_name || !qty) { skipped++; continue; }
+
+        const [ingRows] = await db.pool.promise().query(
+          "SELECT id FROM ingredients WHERE ingredient_name = ? AND created_by = ?",
+          [ingredient_name, creator_id]
+        );
+        if (ingRows.length === 0) { skipped++; continue; }
+        const ingredientid = ingRows[0].id;
+
+        await db.pool.promise().query(
+          "INSERT INTO production_details (foodid, pvarientid, ingredientid, qty, createdby, created_date) VALUES (?, ?, ?, ?, ?, ?)",
+          [foodid, pvarientid, ingredientid, parseFloat(qty), creator_id, newDate]
+        );
+        imported++;
+      }
+    }
+
+    return res.json({ success: true, imported, skipped });
+  } catch (error) {
+    console.error("Import production sets error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getalldetailsProductiondetails,
   foodWithVariant,
@@ -1121,11 +1225,12 @@ module.exports = {
   getAllStockIngredients,
   getPerItemPrice,
   createproduction,
-  findbyIdProductiondetails,  
+  findbyIdProductiondetails,
   updateProductionDetail,
   getProductionDetails,
   getAllStockIngredientswithone,
   viewProductiondetails,
   deleteProductionData,
-  syncProduction
+  syncProduction,
+  importProductionSets
 };

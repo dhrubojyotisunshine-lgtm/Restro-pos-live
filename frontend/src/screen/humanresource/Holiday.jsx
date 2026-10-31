@@ -57,7 +57,56 @@ const Holiday = () => {
   const endDateRef = useRef(null);
   const noOfDaysRef = useRef(null);
 
+  const importInputRef = useRef(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const processImportFile = async (file) => {
+    if (!file) return;
+    const ext = file.name.split(".").pop().toLowerCase();
+    let rows = [];
+    if (ext === "csv") {
+      const text = await file.text();
+      const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+      rows = result.data;
+    } else if (ext === "xlsx" || ext === "xls") {
+      const buffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const worksheet = workbook.worksheets[0];
+      const headerRow = worksheet.getRow(1).values.slice(1);
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const obj = {};
+        row.values.slice(1).forEach((val, i) => { obj[headerRow[i]] = val; });
+        rows.push(obj);
+      });
+    } else {
+      return toast.error("Only CSV or Excel files are supported.");
+    }
+    if (rows.length === 0) return toast.error("No data found in file.");
+    try {
+      const res = await axios.post(`${API_BASE_URL}holidays/import`, { rows }, {
+        headers: { Authorization: token },
+      });
+      if (res.data.success) {
+        toast.success(`Imported: ${res.data.imported}, Skipped: ${res.data.skipped}`);
+        setShowImportModal(false);
+        getallholiday();
+      } else {
+        toast.error(res.data.message || "Import failed");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Import failed");
+    }
+  };
+  const handleImport = (e) => { const file = e.target.files[0]; if (file) processImportFile(file); e.target.value = ""; };
+  const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); const file = e.dataTransfer.files[0]; if (file) processImportFile(file); };
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
+
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const initialFormData = {
     holiday_name: "",
     start_date: "",
@@ -383,6 +432,7 @@ const handleSubmit2 = (e) => {
   useEffect(() => {
     getallholiday();
   }, []);
+  if (!canDo('holiday', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -405,18 +455,28 @@ const handleSubmit2 = (e) => {
             </div>
             <div className=" flex justify-between">
               <span></span>
-              <HasPermission module="Holiday" action="create">
-                <button
-                  onClick={() => {
-                    setIsModalOpen(true);
-                  }}
-                  className=" bg-[#4CBBA1] h-[46px] w-[165px]  mt-10 rounded-sm  flex justify-center items-center
-             gap-x-1 text-white font-semibold"
-                >
-                  <IoIosAddCircleOutline className=" font-semibold text-lg" />
-                  Add Holidays
-                </button>
-              </HasPermission>
+              <div className="flex gap-x-3">
+                {canDo('holiday', 'can_create') && (
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="bg-[#1C1D3E] h-[46px] mt-10 px-4 rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold text-sm"
+                  >
+                    <IoIosAddCircleOutline className="font-semibold text-lg" /> Import
+                  </button>
+                )}
+                {canDo('holiday', 'can_create') && (
+                <HasPermission module="Holiday" action="create">
+                  <button
+                    onClick={() => { setIsModalOpen(true); }}
+                    className=" bg-[#4CBBA1] h-[46px] w-[165px]  mt-10 rounded-sm  flex justify-center items-center
+               gap-x-1 text-white font-semibold"
+                  >
+                    <IoIosAddCircleOutline className=" font-semibold text-lg" />
+                    Add Holidays
+                  </button>
+                </HasPermission>
+                )}
+              </div>
             </div>
             <div className=" mt-11  w-full">
               <section className=" tablebutton">
@@ -454,6 +514,7 @@ const handleSubmit2 = (e) => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('holiday', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -477,6 +538,7 @@ const handleSubmit2 = (e) => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -537,6 +599,7 @@ const handleSubmit2 = (e) => {
 
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
+                                {canDo('holiday', 'can_edit') && (
                                 <HasPermission module="Holiday" action="edit">
                                   <Tooltip
                                     message="Edit"
@@ -552,6 +615,8 @@ const handleSubmit2 = (e) => {
                                     </button>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
+                                {canDo('holiday', 'can_delete') && (
                                 <HasPermission module="Holiday" action="delete">
                                   <Tooltip message="Delete">
                                     <div>
@@ -566,6 +631,7 @@ const handleSubmit2 = (e) => {
                                     </div>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -838,6 +904,26 @@ const handleSubmit2 = (e) => {
         onClose={handleModalClose}
         onDelete={handleModalDelete}
       />
+
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowImportModal(false)}>
+          <div className="bg-white rounded-lg p-6 w-[420px] border-[2px] border-[#4CBBA1] shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-gray-800 mb-1">Import Holidays</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              <a href="/frontend/public/holiday_import_sample.csv" download className="text-blue-600 underline">Download sample CSV</a>
+            </p>
+            <div
+              onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave}
+              onClick={() => importInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${isDragging ? "border-[#4CBBA1] bg-green-50" : "border-gray-300 hover:border-[#4CBBA1]"}`}
+            >
+              <p className="text-gray-500 text-sm">Drag & drop CSV/Excel file here, or <span className="text-blue-600 underline">browse</span></p>
+              <input ref={importInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImport} />
+            </div>
+            <button onClick={() => setShowImportModal(false)} className="mt-4 w-full bg-gray-200 text-gray-700 py-2 rounded-md text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
     </>
   );
 };

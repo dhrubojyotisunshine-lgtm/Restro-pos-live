@@ -99,6 +99,7 @@ const OrderButtons = [
 
 const OrderList = ({ setIsCashRegisterOpen }) => {
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const token = localStorage.getItem("token");
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const APP_URL = import.meta.env.VITE_APP_URL;
@@ -436,6 +437,17 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
     setPlaceOrderData(updatedOrderData);
     console.log("selected order details for kot", orderitems);
     console.log("selected order details", updatedOrderData);
+
+    // Open print window immediately in click context to avoid popup blocker
+    const printWin = printKot
+      ? window.open("", "_blank", "width=380,height=600")
+      : null;
+    if (printWin) {
+      printWin.document.write(
+        "<html><body><p style='font-family:monospace;text-align:center;padding:20px;'>Preparing KOT...</p></body></html>"
+      );
+    }
+
     axios
       .post(`${API_BASE_URL}/orderplace`, updatedOrderData, {
         headers: { Authorization: token },
@@ -444,24 +456,20 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
         if (res.data.success) {
           playBeep();
           toast.success("Order placed successfully!");
-          // setInvoiceData(res.data);
-          // setInvoiceModal(true);
           resetOrderForm();
-
           navigate("/kitchen-status");
-          // 🔥 AUTO PRINT TO ALL KITCHENS (only if the user chose to print KOT)
-          if (
-            printKot &&
-            res.data.kitchens &&
-            res.data.kitchens.length > 0
-          ) {
-            await printToKitchens(res.data.kitchens);
+          if (printKot && res.data.kitchens && res.data.kitchens.length > 0) {
+            await printToKitchens(res.data.kitchens, printWin);
+          } else if (printWin) {
+            printWin.close();
           }
         } else {
+          if (printWin) printWin.close();
           toast.error("Failed to place order: " + res.data.message);
         }
       })
       .catch((error) => {
+        if (printWin) printWin.close();
         const msg = error.response?.data?.message || error.message || "Unknown error occurred";
         if (error.response?.status === 403) {
           toast.warning(msg);
@@ -471,24 +479,92 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
       });
   };
 
-  const printToKitchens = async (kitchens) => {
-    if (!Array.isArray(kitchens) || kitchens.length === 0) return;
+  const printToKitchens = async (kitchens, printWin) => {
+    if (!Array.isArray(kitchens) || kitchens.length === 0) {
+      if (printWin) printWin.close();
+      return;
+    }
+
+    const allOrders = [];
 
     for (const kitchenId of kitchens) {
       try {
+        const kotRes = await axios.get(
+          `${API_BASE_URL}/printkitchen/${kitchenId}`,
+          { headers: { Authorization: token } }
+        );
+        const orders = kotRes.data?.data || [];
+        orders.forEach((o) => allOrders.push({ ...o, kitchenId }));
+
+        // Mark as printed on server
         await axios.post(
           `${API_BASE_URL}/printkitchenkot/${kitchenId}`,
           {},
-          {
-            headers: { Authorization: token },
-          },
+          { headers: { Authorization: token } }
         );
-        console.log(`🖨 KOT printed for kitchen ${kitchenId}`);
       } catch (err) {
-        console.error(`❌ KOT print failed for kitchen ${kitchenId}`, err);
-        toast.error(`KOT print failed for kitchen ${kitchenId}`);
+        console.error(`KOT failed for kitchen ${kitchenId}`, err);
       }
     }
+
+    if (!printWin) return;
+
+    if (allOrders.length === 0) {
+      printWin.close();
+      return;
+    }
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString();
+    const timeStr = now.toLocaleTimeString();
+
+    const ordersHTML = allOrders
+      .map((order) => {
+        const itemRows = order.items
+          .map(
+            (item) => `
+            <tr>
+              <td style="padding:5px 8px;border-bottom:1px solid #eee;">${item.name}</td>
+              <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:center;">${item.qty}</td>
+            </tr>`
+          )
+          .join("");
+
+        return `
+          <div style="page-break-after:always;">
+            <h2 style="text-align:center;margin:4px 0;">Kitchen Order Ticket</h2>
+            <hr style="border:1px dashed #000;"/>
+            <p><b>Table:</b> ${order.table_no || "--"}</p>
+            <p><b>Order #:</b> ${order.saleinvoice || order.order_id}</p>
+            <p><b>Waiter:</b> ${order.waiter || "--"}</p>
+            <p><b>Date:</b> ${dateStr} ${timeStr}</p>
+            <hr style="border:1px dashed #000;"/>
+            <table style="width:100%;border-collapse:collapse;">
+              <thead><tr>
+                <th style="background:#222;color:#fff;padding:5px 8px;text-align:left;">Item</th>
+                <th style="background:#222;color:#fff;padding:5px 8px;text-align:center;">Qty</th>
+              </tr></thead>
+              <tbody>${itemRows}</tbody>
+            </table>
+            <hr style="border:1px dashed #000;"/>
+          </div>`;
+      })
+      .join("");
+
+    const html = `<html><head><title>KOT</title>
+      <style>
+        body { font-family: monospace; width: 280px; margin: 0 auto; font-size: 13px; }
+        p { margin: 2px 0; }
+        @media print { body { width: 280px; } }
+      </style></head>
+      <body>${ordersHTML}</body></html>`;
+
+    printWin.document.open();
+    printWin.document.write(html);
+    printWin.document.close();
+    printWin.focus();
+    printWin.onafterprint = () => printWin.close();
+    printWin.print();
   };
 
   const resetOrderForm = () => {
@@ -1460,6 +1536,7 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
 
             <section className="PreviewButton flex justify-center items-center mt-2">
               <div className="flex gap-x-4">
+                {canDo('pos_invoice', 'can_print') && (
                 <button
                   onClick={handleprewiew}
                   className={`bg-[#1C1D3E] text-[#fff] rounded-md px-6 py-2 ${
@@ -1471,18 +1548,21 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
                 >
                   Preview
                 </button>
+                )}
 
-                {total !== 0 ? (
-                  <button
-                    onClick={() => setOrderModal(true)}
-                    className="bg-[#4c9e53] text-[#fff] rounded-md px-6 py-2"
-                  >
-                    Place Order
-                  </button>
-                ) : (
-                  <button className="bg-[#e24c4c] text-[#fff] rounded-md px-6 py-2">
-                    Not Select
-                  </button>
+                {canDo('pos_invoice', 'can_create') && (
+                  total !== 0 ? (
+                    <button
+                      onClick={() => setOrderModal(true)}
+                      className="bg-[#4c9e53] text-[#fff] rounded-md px-6 py-2"
+                    >
+                      Place Order
+                    </button>
+                  ) : (
+                    <button className="bg-[#e24c4c] text-[#fff] rounded-md px-6 py-2">
+                      Not Select
+                    </button>
+                  )
                 )}
                 <button
                   onClick={() => {
@@ -1500,12 +1580,14 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
                   Cancel
                 </button>
 
+                {canDo('pos_invoice', 'can_create') && (
                 <button
                   onClick={handleholdOrder}
                   className="bg-[#5688d4] text-[#fff] rounded-md px-6 py-2"
                 >
                   Hold Order
                 </button>
+                )}
               </div>
             </section>
           </div>
@@ -1858,6 +1940,7 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
               </div>
 
               {/* Action Button */}
+              {canDo('pos_invoice', 'can_manage') && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1867,6 +1950,7 @@ const OrderList = ({ setIsCashRegisterOpen }) => {
               >
                 Accept Order
               </button>
+              )}
             </div>
           ))}
         </div>

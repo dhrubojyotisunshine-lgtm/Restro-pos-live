@@ -44,6 +44,7 @@ const InventoryStock = () => {
     }
   };
 const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const handleSearch = (e) => {
     const value = e.target.value;
     setSearchName(value);
@@ -270,6 +271,7 @@ const token = localStorage.getItem("token");
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('ingredient_stock_list', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -293,6 +295,7 @@ const token = localStorage.getItem("token");
                       PDF
                     </button>
                   </div>
+                  )}
                   <div className="flex m-auto px-4 rounded-md border-[1px]  border-gray-900">
                     <input
                       value={searchName}

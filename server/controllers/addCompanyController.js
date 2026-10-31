@@ -2351,6 +2351,13 @@ exports.getAdminSubscriptionKey = async (req, res) => {
   try {
     const userId = req.id;
 
+    const [userRow] = await db.pool.promise().query(
+      "SELECT super_admin FROM user WHERE id = ?", [userId]
+    );
+    if (userRow[0]?.super_admin === 2) {
+      return res.status(200).json({ success: true, superadmin: true });
+    }
+
     const [plans] = await db.pool.promise().query(
       `SELECT sup.user_plan_id, sup.plan_id, sup.start_date, sup.end_date, sup.package_status
        FROM superadmin_user_plans sup
@@ -2370,6 +2377,7 @@ exports.getAdminSubscriptionKey = async (req, res) => {
     const plan = plans[0];
     const now = new Date();
     const endDate = new Date(plan.end_date);
+    endDate.setDate(endDate.getDate() + 1);
 
     if (endDate < now) {
       return res.status(200).json({

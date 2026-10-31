@@ -27,6 +27,10 @@ router.delete('/suppliers/:id', auth, purchaseController.deleteSupplier)
 router.get('/suppliers/:id', auth, purchaseController.getSupplierById)
 router.put('/suppliers/:id', auth, purchaseController.updateSupplier);
 
+// Bulk import
+router.post('/suppliers/import', auth, purchaseController.importSuppliers);
+router.post('/purchaseitem/import', auth, purchaseController.importPurchaseItems);
+
 // Electron app sync
 router.post('/sync/purchaseitem', purchaseController.syncPurchaseItems);
 

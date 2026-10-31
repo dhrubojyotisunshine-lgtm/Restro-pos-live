@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useContext, useEffect, useState } from 'react'
 import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import { IoMdNotifications, IoIosAddCircleOutline } from "react-icons/io";
@@ -12,6 +12,7 @@ import ExcelJS from "exceljs";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import useFullScreen from "../../components/useFullScreen";
+import { AuthContext } from "../../store/AuthContext";
 
   const headers = [
     "SL.",
@@ -32,6 +33,7 @@ const Customer_point = () => {
     const [waiterData, setWaterData] = useState([]);
     const { isFullScreen, toggleFullScreen } = useFullScreen();
    const token = localStorage.getItem("token");
+   const { canDo } = useContext(AuthContext);
     const selectPage = (page) => {
         if (page > 0 && page <= Math.ceil(waiterData.length / itemsPerPage)) {
           setCurrentPage(page);
@@ -232,6 +234,7 @@ const Customer_point = () => {
                     </div>
                     <h1>Records per page</h1>
                   </div>
+                  {canDo('customer_point_list', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -255,6 +258,7 @@ const Customer_point = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                 </div>
               </section>
             </div>

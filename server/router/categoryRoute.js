@@ -21,6 +21,7 @@ const upload = multer({
 });
 
 router.get("/data", auth, dataController.getCategory);
+router.post("/categories/import", auth, dataController.importCategories);
 router.post("/data", upload.single("image"), auth, dataController.addCategory);
 router.post(
   "/bulkupload",

@@ -350,6 +350,69 @@ const syncAddons = async (req, res) => {
   }
 };
 
+const importAddOns = async (req, res) => {
+  try {
+    const user_id = req.id;
+    const rows = req.body.rows;
+
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ success: false, message: "No data provided" });
+    }
+
+    const [subResults] = await db.pool.promise().query(
+      "SELECT * FROM superadmin_user_plans WHERE user_id = ?", [user_id]
+    );
+
+    let creator_id;
+    if (subResults.length > 0) {
+      creator_id = user_id;
+    } else {
+      const [userData] = await db.pool.promise().query(
+        "SELECT created_by FROM user WHERE id = ?", [user_id]
+      );
+      if (userData.length === 0 || !userData[0].created_by) {
+        return res.status(403).json({ success: false, message: "You are not authorized to import add-ons." });
+      }
+      const created_by = userData[0].created_by;
+      const [creatorSub] = await db.pool.promise().query(
+        "SELECT * FROM superadmin_user_plans WHERE user_id = ?", [created_by]
+      );
+      if (creatorSub.length === 0) {
+        return res.status(403).json({ success: false, message: "Creator does not have an active subscription." });
+      }
+      creator_id = created_by;
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const row of rows) {
+      const add_on_name = (row.Add_On_Name || "").trim();
+      const price = row.Price;
+      const is_active = row.Status !== undefined ? parseInt(row.Status) : 1;
+
+      if (!add_on_name || !price) { skipped++; continue; }
+
+      const [existing] = await db.pool.promise().query(
+        "SELECT add_on_id FROM add_ons WHERE add_on_name = ? AND created_by = ?",
+        [add_on_name, creator_id]
+      );
+      if (existing.length > 0) { skipped++; continue; }
+
+      await db.pool.promise().query(
+        "INSERT INTO add_ons (add_on_name, price, is_active, created_by) VALUES (?, ?, ?, ?)",
+        [add_on_name, parseFloat(price), is_active, creator_id]
+      );
+      imported++;
+    }
+
+    return res.json({ success: true, imported, skipped });
+  } catch (error) {
+    console.error("Import add-ons error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   deleteAddOn,
   updateAddOn,
@@ -358,5 +421,6 @@ module.exports = {
   createAddOnWithAssign,
   getAddOns,
   getAddOnsById,
-  syncAddons
+  syncAddons,
+  importAddOns
 };

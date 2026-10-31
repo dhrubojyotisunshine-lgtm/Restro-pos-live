@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import Nav from "../../components/Nav";
 import Hamburger from "hamburger-react";
 import { IoMdNotifications, IoIosAddCircleOutline } from "react-icons/io";
@@ -89,6 +89,9 @@ const SetProductionList = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
   const [searchName, setSearchName] = useState("");
+  const importInputRef = useRef(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
   const navigate = useNavigate();
   const selectPage = (page) => {
@@ -97,10 +100,55 @@ const SetProductionList = () => {
     }
   };
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const handleItemsPerPageChange = (e) => {
     setItemsPerPage(Number(e.target.value));
     setCurrentPage(1); // Reset to first page when items per page changes
   };
+  const processImportFile = async (file) => {
+    if (!file) return;
+    const ext = file.name.split(".").pop().toLowerCase();
+    let rows = [];
+    if (ext === "csv") {
+      const text = await file.text();
+      const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+      rows = result.data;
+    } else if (ext === "xlsx" || ext === "xls") {
+      const buffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const worksheet = workbook.worksheets[0];
+      const headerRow = worksheet.getRow(1).values.slice(1);
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const obj = {};
+        row.values.slice(1).forEach((val, i) => { obj[headerRow[i]] = val; });
+        rows.push(obj);
+      });
+    } else {
+      return toast.error("Only CSV or Excel files are supported.");
+    }
+    if (rows.length === 0) return toast.error("No data found in file.");
+    try {
+      const res = await axios.post(`${API_BASE_URL}productionsets/import`, { rows }, {
+        headers: { Authorization: token },
+      });
+      if (res.data.success) {
+        toast.success(`Imported: ${res.data.imported}, Skipped: ${res.data.skipped}`);
+        setShowImportModal(false);
+        getReservationData();
+      } else {
+        toast.error(res.data.message || "Import failed");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Import failed");
+    }
+  };
+  const handleImport = (e) => { const file = e.target.files[0]; if (file) processImportFile(file); e.target.value = ""; };
+  const handleDrop = (e) => { e.preventDefault(); setIsDragging(false); const file = e.dataTransfer.files[0]; if (file) processImportFile(file); };
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+  const handleDragLeave = () => setIsDragging(false);
+
   // get all data
   const getReservationData = async () => {
     try {
@@ -556,19 +604,30 @@ const deleteCategory = ({ foodid, pvarientid }) => {
 
             <div className=" flex justify-between mt-11">
               <sapn> </sapn>
-              <HasPermission module="Production Set List" action="create">
-
-              <button
-                onClick={() => {
-                  navigate("/set-production-unit");
-                }}
-                className=" bg-[#4CBBA1] h-[46px] text-nowrap w-[269px] rounded-sm  flex justify-center items-center
-               gap-x-1 text-white font-semibold"
-              >
-                <IoIosAddCircleOutline className=" font-semibold text-xl" />
-                Set Production Unit
-              </button>
-              </HasPermission>
+              <div className="flex gap-x-3">
+                {canDo('production_set_list', 'can_create') && (
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="bg-[#1C1D3E] h-[46px] px-4 rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold text-sm"
+                  >
+                    <IoIosAddCircleOutline className="font-semibold text-xl" /> Import
+                  </button>
+                )}
+                {canDo('production_set_list', 'can_create') && (
+                <HasPermission module="Production Set List" action="create">
+                  <button
+                    onClick={() => {
+                      navigate("/set-production-unit");
+                    }}
+                    className=" bg-[#4CBBA1] h-[46px] text-nowrap w-[269px] rounded-sm  flex justify-center items-center
+                 gap-x-1 text-white font-semibold"
+                  >
+                    <IoIosAddCircleOutline className=" font-semibold text-xl" />
+                    Set Production Unit
+                  </button>
+                </HasPermission>
+                )}
+              </div>
             </div>
             {/* Search Bar */}
             <div className=" mt-11  w-full">
@@ -608,6 +667,7 @@ const deleteCategory = ({ foodid, pvarientid }) => {
                   </div>
 
               
+                  {canDo('production_set_list', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -631,6 +691,7 @@ const deleteCategory = ({ foodid, pvarientid }) => {
                       PDF
                     </button>
                   </div>
+                  )}
 
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
@@ -696,26 +757,24 @@ const deleteCategory = ({ foodid, pvarientid }) => {
 
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
+                                  {canDo('production_set_list', 'can_edit') && (
                                   <HasPermission module="Production Set List" action="edit">
-
-                                  <Tooltip message="Edit">
-                                    <button
-                                      onClick={() =>
-                                        handleEditClick(
-                                          row.foodid,
-                                          row.pvarientid
-                                        )
-                                      }
-                                      className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
-                                    >
-                                      <FaRegEdit />
-                                    </button>
-                                  </Tooltip>
+                                    <Tooltip message="Edit">
+                                      <button
+                                        onClick={() =>
+                                          handleEditClick(
+                                            row.foodid,
+                                            row.pvarientid
+                                          )
+                                        }
+                                        className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
+                                      >
+                                        <FaRegEdit />
+                                      </button>
+                                    </Tooltip>
                                   </HasPermission>
-                                  <HasPermission
-                                    module="Production Set List"
-                                    action="access"
-                                  >
+                                  )}
+                                  {canDo('production_set_list', 'can_manage') && (
                                     <Tooltip message="Details">
                                       <button
                                         onClick={() =>
@@ -727,7 +786,7 @@ const deleteCategory = ({ foodid, pvarientid }) => {
                                         <FaRegEye />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
+                                  )}
                                  
                                   <button
   className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
@@ -939,6 +998,26 @@ const deleteCategory = ({ foodid, pvarientid }) => {
   onDelete={handleModalDelete}
   type={"Production"}
 />
+
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowImportModal(false)}>
+          <div className="bg-white rounded-lg p-6 w-[420px] border-[2px] border-[#4CBBA1] shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-gray-800 mb-1">Import Production Sets</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              <a href="/frontend/public/production_set_import_sample.csv" download className="text-blue-600 underline">Download sample CSV</a>
+            </p>
+            <div
+              onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave}
+              onClick={() => importInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${isDragging ? "border-[#4CBBA1] bg-green-50" : "border-gray-300 hover:border-[#4CBBA1]"}`}
+            >
+              <p className="text-gray-500 text-sm">Drag & drop CSV/Excel file here, or <span className="text-blue-600 underline">browse</span></p>
+              <input ref={importInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImport} />
+            </div>
+            <button onClick={() => setShowImportModal(false)} className="mt-4 w-full bg-gray-200 text-gray-700 py-2 rounded-md text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
     </>
   );
 };

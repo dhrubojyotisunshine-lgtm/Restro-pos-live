@@ -5,6 +5,7 @@ const auth = require("../middleware/authicantejwt");
 const leaveController = require("../controllers/leaveController");
 
 router.get("/allholidays", auth, leaveController.getHolidays);
+router.post("/holidays/import", auth, leaveController.importHolidays);
 router.post("/addholiday", auth, leaveController.createHoliday);
 router.delete("/deleteholiday/:id", auth, leaveController.deleteHoliday);
 router.get("/holiday/:id", auth, leaveController.getHolidayById);

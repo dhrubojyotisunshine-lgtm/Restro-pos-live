@@ -12,8 +12,8 @@ import { FaMagnifyingGlass } from "react-icons/fa6";
 import defaultimage from "../../assets/images/user.png";
 import DeleteDialogBox from "../../components/DeleteDialogBox";
 import axios from "axios";
-import HasPermission from "../../store/HasPermission";
 import { AuthContext } from "../../store/AuthContext";
+import HasPermission from "../../store/HasPermission";
 import useFullScreen from "../../components/useFullScreen";
 
 import Papa from "papaparse";
@@ -66,6 +66,7 @@ const User_list = () => {
     e.target.src = defaultimage;
   };
 const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
   const selectPage = (page) => {
     if (page > 0 && page <= Math.ceil(userData.length / itemsPerPage)) {
@@ -555,6 +556,7 @@ XLSX.writeFile(wb, "user-sample-upload.xlsx");
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('user_list', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -578,6 +580,7 @@ XLSX.writeFile(wb, "user-sample-upload.xlsx");
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -658,6 +661,7 @@ XLSX.writeFile(wb, "user-sample-upload.xlsx");
               </button>
             ) : (
               <div className="flex justify-center gap-x-2 font-bold">
+                {canDo('user_list', 'can_edit') && (
                 <HasPermission module="User List" action="edit">
                 <Tooltip message="Edit" key={row.id}>
                   <button
@@ -668,6 +672,8 @@ XLSX.writeFile(wb, "user-sample-upload.xlsx");
                   </button>
                 </Tooltip>
                 </HasPermission>
+                )}
+                {canDo('user_list', 'can_delete') && (
                 <HasPermission module="User List" action="delete">
                 <Tooltip message="Delete Category">
                   <div>
@@ -680,6 +686,7 @@ XLSX.writeFile(wb, "user-sample-upload.xlsx");
                   </div>
                 </Tooltip>
                 </HasPermission>
+                )}
                
               </div>
             )}

@@ -51,7 +51,7 @@ const Reservation = () => {
   const [itemsPerPage, setItemsPerPage] = useState(5);
   const [deleteModalId, setDeleteModalId] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const { token, userId } = useContext(AuthContext);
+  const { token, userId, canDo } = useContext(AuthContext);
 const { isFullScreen, toggleFullScreen } = useFullScreen();
   const [searchName, setSearchName] = useState("");
   const [errors, setErrors] = useState({});
@@ -415,8 +415,7 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
 
             <div className=" flex justify-between mt-11">
               <span></span>
-              <HasPermission module="All Reservations" action="create">
-
+              {canDo('all_reservations', 'can_create') && (
               <button
                 onClick={() => {
                   navigate("/add-booking");
@@ -427,7 +426,7 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
                 <IoIosAddCircleOutline className=" font-semibold text-lg" />
                 Take A Reservation
               </button>
-              </HasPermission>
+              )}
             </div>
             {/* Search Bar */}
 
@@ -467,7 +466,8 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
                     <h1>Records per page</h1>
                   </div>
 
-                 <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
+                  {canDo('all_reservations', 'can_export') && (
+                  <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
                       className="hover:bg-[#1C1D3E] text-[#000] hover:scale-110 duration-300 hover:text-white border-[2px] border-zinc-300 rounded-md py-2 px-11 w-full sm:w-auto"
@@ -490,6 +490,7 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -569,7 +570,7 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex justify-center gap-x-2 font-bold">
 
-                                  <HasPermission module="All Reservations" action="edit">
+                                  {canDo('all_reservations', 'can_edit') && (
                                   <Tooltip message="Edit">
                                     <button
                                       onClick={() =>
@@ -580,8 +581,9 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
                                       <FaRegEdit />
                                     </button>
                                   </Tooltip>
-                                  </HasPermission>
-                                  <HasPermission module="All Reservations" action="delete"> <Tooltip message="Clear Booking">
+                                  )}
+                                  {canDo('all_reservations', 'can_delete') && (
+                                  <Tooltip message="Clear Booking">
                                     <button
                                       onClick={() =>
                                         handleDeleteClick(row.reserveid)
@@ -590,7 +592,8 @@ const { isFullScreen, toggleFullScreen } = useFullScreen();
                                     >
                                       <FaRegTrashCan />
                                     </button>
-                                  </Tooltip></HasPermission>
+                                  </Tooltip>
+                                  )}
                                  
                                 </div>
                               </td>

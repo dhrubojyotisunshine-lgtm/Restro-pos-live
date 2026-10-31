@@ -2001,6 +2001,238 @@ const getReturnItemInfoByID = (req, res) => {
   });
 };
 
+const importSuppliers = (req, res) => {
+  const user_id = req.id;
+  const { suppliers } = req.body;
+
+  if (!Array.isArray(suppliers) || suppliers.length === 0) {
+    return res.status(400).json({ success: false, message: 'No supplier data provided' });
+  }
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [user_id], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: 'Server error' });
+    if (!userResult.length) return res.status(404).json({ success: false, message: 'User not found' });
+    const { created_by } = userResult[0];
+
+    const checkSubQuery = "SELECT user_id FROM superadmin_user_plans WHERE user_id = ?";
+    db.pool.query(checkSubQuery, [user_id], (err, subResult) => {
+      if (err) return res.status(500).json({ success: false, message: 'Server error' });
+
+      if (subResult.length > 0) {
+        processImport(user_id);
+      } else {
+        if (!created_by) return res.status(403).json({ success: false, message: 'Not authorized' });
+        db.pool.query(checkSubQuery, [created_by], (err, creatorSub) => {
+          if (err) return res.status(500).json({ success: false, message: 'Server error' });
+          if (!creatorSub.length) return res.status(403).json({ success: false, message: 'No active subscription' });
+          processImport(created_by);
+        });
+      }
+    });
+
+    function processImport(creatorId) {
+      let imported = 0, skipped = 0, index = 0;
+
+      const processNext = () => {
+        if (index >= suppliers.length) {
+          return res.status(200).json({ success: true, message: `Import complete. ${imported} imported, ${skipped} skipped.`, imported, skipped });
+        }
+
+        const sup = suppliers[index++];
+        const { Supplier_Name, Email, Mobile, Address, Previous_Balance } = sup;
+
+        if (!Supplier_Name || !Email || !Mobile || !Address) { skipped++; return processNext(); }
+
+        const checkDupQuery = "SELECT supid FROM supplier WHERE (supEmail = ? OR supMobile = ?) AND created_by = ?";
+        db.pool.query(checkDupQuery, [Email, String(Mobile), creatorId], (err, dupResult) => {
+          if (err || dupResult.length > 0) { skipped++; return processNext(); }
+
+          db.pool.query('SELECT suplier_code FROM supplier ORDER BY suplier_code DESC LIMIT 1', (err, codeResult) => {
+            if (err) { skipped++; return processNext(); }
+
+            let newCode = 'sup_001';
+            if (codeResult.length > 0 && codeResult[0].suplier_code) {
+              const num = parseInt(codeResult[0].suplier_code.split('_')[1] || '0') + 1;
+              newCode = `sup_${num.toString().padStart(3, '0')}`;
+            }
+
+            const insertQuery = 'INSERT INTO supplier (suplier_code, supName, supEmail, supMobile, supAddress, created_by) VALUES (?, ?, ?, ?, ?, ?)';
+            db.pool.query(insertQuery, [newCode, Supplier_Name, Email, String(Mobile), Address, creatorId], (err, result) => {
+              if (err) { skipped++; return processNext(); }
+
+              const supplierId = result.insertId;
+              const today = new Date().toISOString().split('T')[0];
+              const amount = parseFloat(Previous_Balance) || 0;
+              const ledgerQuery = 'INSERT INTO supplier_ledger (supplier_id, amount, date, description, chalan_no, transaction_id, status, d_c) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+              db.pool.query(ledgerQuery, [supplierId, amount, today, 'Previous adjustment with software', 'Adjustment', newCode, 1, 'c'], (err) => {
+                if (err) console.error('Ledger insert error:', err);
+                imported++;
+                processNext();
+              });
+            });
+          });
+        });
+      };
+
+      processNext();
+    }
+  });
+};
+
+const importPurchaseItems = (req, res) => {
+  const user_id = req.id;
+  const { rows } = req.body;
+
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return res.status(400).json({ success: false, message: 'No data provided' });
+  }
+
+  const userQuery = "SELECT is_admin, created_by FROM user WHERE id = ?";
+  db.pool.query(userQuery, [user_id], (err, userResult) => {
+    if (err) return res.status(500).json({ success: false, message: 'Server error' });
+    if (!userResult.length) return res.status(404).json({ success: false, message: 'User not found' });
+    const { created_by } = userResult[0];
+
+    const checkSubQuery = "SELECT user_id FROM superadmin_user_plans WHERE user_id = ?";
+    db.pool.query(checkSubQuery, [user_id], (err, subResult) => {
+      if (err) return res.status(500).json({ success: false, message: 'Server error' });
+
+      if (subResult.length > 0) {
+        processImport(user_id);
+      } else {
+        if (!created_by) return res.status(403).json({ success: false, message: 'Not authorized' });
+        db.pool.query(checkSubQuery, [created_by], (err, creatorSub) => {
+          if (err) return res.status(500).json({ success: false, message: 'Server error' });
+          if (!creatorSub.length) return res.status(403).json({ success: false, message: 'No active subscription' });
+          processImport(created_by);
+        });
+      }
+    });
+
+    function processImport(savedby) {
+      // Group rows by Invoice_ID
+      const invoiceMap = {};
+      rows.forEach(row => {
+        const id = String(row.Invoice_ID || '').trim();
+        if (!id) return;
+        if (!invoiceMap[id]) {
+          invoiceMap[id] = {
+            header: {
+              Invoice_ID: id,
+              Supplier_Name: String(row.Supplier_Name || '').trim(),
+              Purchase_Date: String(row.Purchase_Date || '').trim(),
+              Expire_Date: String(row.Expire_Date || '').trim(),
+              Details: String(row.Details || '').trim(),
+              Payment_Method: String(row.Payment_Method || '').trim(),
+              Paid_Amount: (row.Paid_Amount !== undefined && row.Paid_Amount !== null && row.Paid_Amount !== '') ? parseFloat(row.Paid_Amount) : null,
+            },
+            items: [],
+          };
+        }
+        if (row.Ingredient_Name) {
+          invoiceMap[id].items.push({
+            Ingredient_Name: String(row.Ingredient_Name).trim(),
+            Quantity: parseFloat(row.Quantity) || 0,
+            Rate: parseFloat(row.Rate) || 0,
+          });
+        }
+      });
+
+      const invoices = Object.values(invoiceMap);
+      let imported = 0, skipped = 0;
+
+      db.pool.query('SELECT supid, supName FROM supplier WHERE created_by = ?', [savedby], (err, suppliers) => {
+        if (err) return res.status(500).json({ success: false, message: 'Server error' });
+
+        db.pool.query('SELECT id, ingredient_name FROM ingredients WHERE created_by = ? AND is_active = 1', [savedby], (err, ingredients) => {
+          if (err) return res.status(500).json({ success: false, message: 'Server error' });
+
+          db.pool.query('SELECT payment_method_id, payment_method FROM payment_method', (err, paymentMethods) => {
+            if (err) return res.status(500).json({ success: false, message: 'Server error' });
+
+            const supplierMap = {};
+            suppliers.forEach(s => { supplierMap[s.supName.toLowerCase()] = s.supid; });
+
+            const ingredientMap = {};
+            ingredients.forEach(i => { ingredientMap[i.ingredient_name.toLowerCase()] = i.id; });
+
+            const paymentMap = {};
+            paymentMethods.forEach(p => { paymentMap[p.payment_method.toLowerCase()] = p.payment_method_id; });
+
+            let index = 0;
+            const processNext = () => {
+              if (index >= invoices.length) {
+                return res.status(200).json({ success: true, message: `Import complete. ${imported} imported, ${skipped} skipped.`, imported, skipped });
+              }
+
+              const { header, items } = invoices[index++];
+
+              const supplierId = supplierMap[header.Supplier_Name.toLowerCase()];
+              if (!supplierId || items.length === 0) { skipped++; return processNext(); }
+
+              if (!header.Payment_Method || !header.Details || !header.Purchase_Date || !header.Expire_Date || header.Paid_Amount === null) { skipped++; return processNext(); }
+
+              const resolvedItems = items.map(item => ({
+                ...item,
+                ingredientId: ingredientMap[item.Ingredient_Name.toLowerCase()],
+              }));
+              if (resolvedItems.some(it => !it.ingredientId)) { skipped++; return processNext(); }
+
+              db.pool.query('SELECT purID FROM purchaseitem WHERE invoiceid = ? AND savedby = ?', [header.Invoice_ID, savedby], (err, existing) => {
+                if (err || existing.length > 0) { skipped++; return processNext(); }
+
+                const paymentTypeId = paymentMap[header.Payment_Method.toLowerCase()] || 1;
+                const totalPrice = resolvedItems.reduce((sum, it) => sum + (it.Quantity * it.Rate), 0);
+                const purchaseDate = normalizeDateString(header.Purchase_Date);
+                const expireDate = normalizeDateString(header.Expire_Date);
+
+                const insertPurchaseQuery = `INSERT INTO purchaseitem (invoiceid, paymenttype, total_price, paid_amount, details, purchasedate, purchaseexpiredate, savedby, suplierID) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                db.pool.query(insertPurchaseQuery, [header.Invoice_ID, paymentTypeId, totalPrice, header.Paid_Amount, header.Details, purchaseDate, expireDate, savedby, supplierId], (err, result) => {
+                  if (err) { skipped++; return processNext(); }
+
+                  const purchaseid = result.insertId;
+                  let itemIndex = 0;
+
+                  const insertItem = () => {
+                    if (itemIndex >= resolvedItems.length) {
+                      const creditQ = `INSERT INTO supplier_ledger (amount, transaction_id, description, chalan_no, payment_type, status, d_c, date, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                      db.pool.query(creditQ, [totalPrice, header.Invoice_ID, header.Details, header.Invoice_ID, paymentTypeId, 1, 'c', purchaseDate, supplierId], (err) => {
+                        if (err) console.error('Credit ledger error:', err);
+                        const debitQ = `INSERT INTO supplier_ledger (amount, transaction_id, description, chalan_no, payment_type, status, d_c, date, supplier_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                        db.pool.query(debitQ, [header.Paid_Amount, header.Invoice_ID, `Purchase From Supplier ${header.Details}`, header.Invoice_ID, paymentTypeId, 1, 'd', purchaseDate, supplierId], (err) => {
+                          if (err) console.error('Debit ledger error:', err);
+                          imported++;
+                          processNext();
+                        });
+                      });
+                      return;
+                    }
+
+                    const item = resolvedItems[itemIndex++];
+                    const detailQ = `INSERT INTO purchase_details (purchaseid, indredientid, quantity, price, totalprice, purchasedate, purchaseexpiredate, purchaseby) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+                    db.pool.query(detailQ, [purchaseid, item.ingredientId, item.Quantity, item.Rate, item.Quantity * item.Rate, purchaseDate, expireDate, savedby], (err) => {
+                      if (err) console.error('Detail insert error:', err);
+                      db.pool.query('UPDATE ingredients SET stock_qty = stock_qty + ? WHERE id = ?', [item.Quantity, item.ingredientId], (err) => {
+                        if (err) console.error('Stock update error:', err);
+                        insertItem();
+                      });
+                    });
+                  };
+
+                  insertItem();
+                });
+              });
+            };
+
+            processNext();
+          });
+        });
+      });
+    }
+  });
+};
+
 const syncPurchaseItems = async (req, res) => {
   try {
     const items = req.body;
@@ -2057,6 +2289,8 @@ const syncPurchaseItems = async (req, res) => {
     purReturnInsert,
     getPurchaseTransactions,
     getReturnItemInfoByID,
-    syncPurchaseItems
+    syncPurchaseItems,
+    importSuppliers,
+    importPurchaseItems,
 
   }

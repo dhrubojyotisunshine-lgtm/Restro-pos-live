@@ -14,8 +14,8 @@ import axios from "axios";
 import defaultimage from "../../assets/images/tea.jpg";
 import CategoryDialogBox from "../../components/CategoryDialogBox";
 import EditDialogBox from "../../components/EditDialogBox";
-import HasPermission from "../../store/HasPermission";
 import { AuthContext } from "../../store/AuthContext";
+import HasPermission from "../../store/HasPermission";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 
@@ -77,6 +77,7 @@ const Point_setting = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const VITE_IMG_URL = import.meta.env.VITE_IMG_URL;
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   const [isOpen, setOpen] = useState(false);
   const [data, setData] = useState([]);
   const [dataa, setDataa] = useState([]);
@@ -365,36 +366,27 @@ const Point_setting = () => {
               </div>
             </div>
             <div className=" flex justify-end">
-              {/* <HasPermission module="Category List" action="create">
-                {!isAdded && (
+              {canDo('point_setting', 'can_create') && (
+                <HasPermission module="Point Setting" action="create">
                   <button
                     onClick={() => setIsModalOpen(true)}
-                    className="bg-[#4CBBA1] h-[46px] w-[165px] mt-10 rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold"
+                    disabled={isAdded}
+                    className={`bg-[#4CBBA1] h-[46px] w-[165px] mt-10 rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold ${
+                      isAdded ? "opacity-50 cursor-not-allowed" : ""
+                    }`}
                   >
                     <IoIosAddCircleOutline className="font-semibold text-lg" />
                     Create Point
                   </button>
-                )}
-              </HasPermission> */}
-
-              <HasPermission module="Category List" action="create">
-                <button
-                  onClick={() => setIsModalOpen(true)}
-                  disabled={isAdded}
-                  className={`bg-[#4CBBA1] h-[46px] w-[165px] mt-10 rounded-sm flex justify-center items-center gap-x-1 text-white font-semibold ${
-                    isAdded ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                >
-                  <IoIosAddCircleOutline className="font-semibold text-lg" />
-                  Create Point
-                </button>
-              </HasPermission>
+                </HasPermission>
+              )}
             </div>
 
             {/* Search Bar */}
             <div className=" mt-5  w-full">
               <section className=" tablebutton">
                 <div className="orderButton  flex  flex-wrap gap-x-5 gap-y-5 ">
+                  {canDo('point_setting', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -418,6 +410,7 @@ const Point_setting = () => {
                       PDF
                     </button>
                   </div>
+                  )}
                   <span></span>
                 </div>
               </section>
@@ -460,20 +453,18 @@ const Point_setting = () => {
                             </td>
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
-                                <HasPermission
-                                  module="Category List"
-                                  action="edit"
-                                >
-                                  {" "}
-                                  <Tooltip message="edit" key={row.id}>
-                                    <button
-                                      onClick={() => handleEditClick(row.id)}
-                                      className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
-                                    >
-                                      <FaRegEdit />
-                                    </button>
-                                  </Tooltip>
-                                </HasPermission>
+                                {canDo('point_setting', 'can_edit') && (
+                                  <HasPermission module="Point Setting" action="edit">
+                                    <Tooltip message="edit" key={row.id}>
+                                      <button
+                                        onClick={() => handleEditClick(row.id)}
+                                        className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
+                                      >
+                                        <FaRegEdit />
+                                      </button>
+                                    </Tooltip>
+                                  </HasPermission>
+                                )}
                               </div>
                             </td>
                           </tr>

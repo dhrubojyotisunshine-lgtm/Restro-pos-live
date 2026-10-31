@@ -30,6 +30,7 @@ const AddCategory = () => {
     kitchen_id: "",
   };
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
   // All get data
   const [data, setData] = useState([]);
   const { isFullScreen, toggleFullScreen } = useFullScreen();
@@ -599,12 +600,16 @@ const AddCategory = () => {
                         Reset
                       </button>
 
-                      <button
-                        className="bg-[#1C1D3E] text-white w-[104px] h-[42px] rounded focus:outline-none focus:shadow-outline"
-                        type="submit"
-                      >
-                        Save
-                      </button>
+                      {canDo('add_category', 'can_create') && (
+                      <HasPermission module="Add Category" action="create">
+                        <button
+                          className="bg-[#1C1D3E] text-white w-[104px] h-[42px] rounded focus:outline-none focus:shadow-outline"
+                          type="submit"
+                        >
+                          Save
+                        </button>
+                      </HasPermission>
+                      )}
                     </div>
                   </div>
                 </div>

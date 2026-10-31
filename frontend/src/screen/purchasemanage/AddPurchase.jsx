@@ -45,6 +45,7 @@ const AddPurchase = () => {
     suplierID: "",
   });
   const token = localStorage.getItem("token");
+  const { canDo } = useContext(AuthContext);
 
   // Handle form submission
   const validateForm = () => {
@@ -475,7 +476,7 @@ const AddPurchase = () => {
             <div className=" flex justify-between mt-11">
               <span></span>
               <div className=" flex justify-center items-center gap-x-5 ">
-                <HasPermission module="Add Purchase" action="create">
+                {canDo('add_purchase', 'can_create') && (
                   <button
                     onClick={() => setCmodal(true)}
                     className=" bg-[#4CBBA1] h-[46px] w-[124px] rounded-sm  flex justify-center items-center
@@ -484,7 +485,7 @@ const AddPurchase = () => {
                     <IoIosAddCircleOutline className=" font-semibold text-lg" />
                     Add Supplier
                   </button>
-                </HasPermission>
+                )}
               </div>
             </div>
 
@@ -995,7 +996,7 @@ const AddPurchase = () => {
 
                 {/* Submit Button */}
                 <div className="flex justify-end submit_button mt-[50px]">
-                  <HasPermission module="Add Purchase" action="create">
+                  {canDo('add_purchase', 'can_create') && (
                     <button
                       onClick={handleSubmit}
                       type="button"
@@ -1003,7 +1004,7 @@ const AddPurchase = () => {
                     >
                       Submit
                     </button>
-                  </HasPermission>
+                  )}
                 </div>
               </form>
             </div>
@@ -1104,14 +1105,14 @@ const AddPurchase = () => {
               </div>
 
               <div className="flex mt-4 float-right gap-x-3">
-                <HasPermission module="Add Purchase" action="create">
+                {canDo('add_purchase', 'can_create') && (
                   <button
                     className="bg-[#1C1D3E] text-white w-[104px] h-[42px] rounded focus:outline-none focus:shadow-outline"
                     type="submit"
                   >
                     Save
                   </button>
-                </HasPermission>
+                )}
               </div>
             </div>
           </form>

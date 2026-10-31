@@ -42,6 +42,7 @@ const Tooltip = ({ message, children }) => {
 const Addexpense_item = () => {
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const [searchName, setSearchName] = useState("");
   const [isOpen, setOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -320,6 +321,7 @@ const [createdby,setCreatedby]=useState("")
     getExpenseItem();
   }, []);
 
+  if (!canDo('add_expense_item', 'can_view')) return <div className="p-8 text-center text-gray-500">Access Denied</div>;
   return (
     <>
       <div className="main_div ">
@@ -342,6 +344,7 @@ const [createdby,setCreatedby]=useState("")
             </div>
             <div className=" flex justify-between">
               <span></span>
+              {canDo('add_expense_item', 'can_create') && (
               <HasPermission module="Addexpense Item" action="create">
                 <button
                   onClick={() => {
@@ -354,6 +357,7 @@ const [createdby,setCreatedby]=useState("")
                   Add Expense Item
                 </button>
               </HasPermission>
+              )}
             </div>
             <div className=" mt-11  w-full">
               <section className=" tablebutton">
@@ -391,6 +395,7 @@ const [createdby,setCreatedby]=useState("")
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('add_expense_item', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                       <button
                         onClick={() => handleDownload("csv")}
@@ -414,6 +419,7 @@ const [createdby,setCreatedby]=useState("")
                         PDF
                       </button>
                     </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -467,6 +473,7 @@ const [createdby,setCreatedby]=useState("")
 
                             <td className="py-2 px-4 border border-[#4CBBA1]">
                               <div className="flex justify-center gap-x-2 font-bold">
+                                {canDo('add_expense_item', 'can_edit') && (
                                 <HasPermission
                                   module="Addexpense Item"
                                   action="edit"
@@ -480,6 +487,8 @@ const [createdby,setCreatedby]=useState("")
                                     </button>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
+                                {canDo('add_expense_item', 'can_delete') && (
                                 <HasPermission
                                   module="Addexpense Item"
                                   action="delete"
@@ -497,6 +506,7 @@ const [createdby,setCreatedby]=useState("")
                                     </div>
                                   </Tooltip>
                                 </HasPermission>
+                                )}
                               </div>
                             </td>
                           </tr>

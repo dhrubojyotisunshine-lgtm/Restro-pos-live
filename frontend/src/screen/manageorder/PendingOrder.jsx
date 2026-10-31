@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useContext } from "react";
 import Nav from "../../components/Nav";
 import { useReactToPrint } from "react-to-print";
 import Hamburger from "hamburger-react";
@@ -23,6 +23,7 @@ import { writeCSV } from "papaparse";
 import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import useFullScreen from "../../components/useFullScreen";
+import { AuthContext } from "../../store/AuthContext";
 const Tooltip = ({ message, children }) => {
   return (
     <div className="group relative flex">
@@ -47,6 +48,7 @@ const PendingOrder = () => {
   const [invoiceDataModal, setInvoiceDataModal] = useState(false);
   const token = localStorage.getItem("token");
   const { isFullScreen, toggleFullScreen } = useFullScreen();
+  const { canDo } = useContext(AuthContext);
   const [billData, setBillData] = useState([]);
   const [isDeletOpen, setIsDeletOpen] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -492,6 +494,7 @@ const PendingOrder = () => {
                     <h1>Records per page</h1>
                   </div>
 
+                  {canDo('pending_order', 'can_export') && (
                   <div className="w-full sm:w-auto flex gap-x-4 downloadbutton">
                     <button
                       onClick={() => handleDownload("csv")}
@@ -515,6 +518,7 @@ const PendingOrder = () => {
                       PDF
                     </button>
                   </div>
+                  )}
 
                   <div className="flex m-auto px-4 rounded-md border-[1px]   border-gray-900">
                     <input
@@ -603,10 +607,7 @@ const PendingOrder = () => {
 
                               <td className="py-2 px-4 border border-[#4CBBA1]">
                                 <div className="flex gap-x-2 font-bold">
-                                  <HasPermission
-                                    module="Pending Order"
-                                    action="access"
-                                  >
+                                  {canDo('pending_order', 'can_print') && (
                                     <Tooltip message="print">
                                       <button
                                         onClick={() =>
@@ -617,7 +618,7 @@ const PendingOrder = () => {
                                         <IoDocumentTextOutline />
                                       </button>
                                     </Tooltip>
-                                  </HasPermission>
+                                  )}
                                   {/* <HasPermission
                                     module="Pending Order"
                                     action="access"
@@ -636,40 +637,18 @@ const PendingOrder = () => {
                                       </Tooltip>
                                     )}
                                   </HasPermission> */}
-                                  <HasPermission
-                                    module="Pending Order"
-                                    action="access"
-                                  >
-                                    {/* <Tooltip message="invoice">
+                                  {canDo('pending_order', 'can_delete') && row.bill_status !== 1 && (
+                                    <Tooltip message="Cancel Order">
                                       <button
-                                        disabled
-                                        onClick={() =>
-                                          showInvoiceData(row.order_id)
-                                        }
-                                        className="bg-[#1C1D3E] p-1 rounded-sm text-white hover:scale-105"
+                                        onClick={() => {
+                                          deleteOrder(row.order_id);
+                                        }}
+                                        className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
                                       >
-                                        <FaRegEye />
+                                        <FaRegTrashCan />
                                       </button>
-                                    </Tooltip> */}
-                                  </HasPermission>
-
-                                  <HasPermission
-                                    module="Pending Order"
-                                    action="delete"
-                                  >
-                                    {row.bill_status !== 1 && (
-                                      <Tooltip message="Cancel Order">
-                                        <button
-                                          onClick={() => {
-                                            deleteOrder(row.order_id);
-                                          }}
-                                          className="bg-[#FB3F3F] p-1 rounded-sm text-white hover:scale-105"
-                                        >
-                                          <FaRegTrashCan />
-                                        </button>
-                                      </Tooltip>
-                                    )}
-                                  </HasPermission>
+                                    </Tooltip>
+                                  )}
                                 </div>
                               </td>
                             </tr>

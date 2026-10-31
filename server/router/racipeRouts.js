@@ -2,6 +2,7 @@ const express = require("express");
 const auth=require("../middleware/authicantejwt")
 const router = express.Router();
 const recipecontroller= require("../controllers/recipemanagement")
+router.post("/productionsets/import", auth, recipecontroller.importProductionSets);
 router.get("/productionsetlist",auth,recipecontroller.getalldetailsProductiondetails)
 router.get("/variantdata", auth, recipecontroller.foodWithVariant);
 router.get('/foodname', auth,recipecontroller.foodNameFetchApi);
